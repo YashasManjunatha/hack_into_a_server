@@ -15,8 +15,10 @@ typedef struct metadata {
    * free bytes
    */
   size_t size;
-  struct metadata* next;
-  struct metadata* prev; 
+  struct metadata* true_next;
+  struct metadata* true_prev;
+  struct metadata* freelist_next;
+  struct metadata* freelist_prev; 
 } metadata_t;
 
 /* freelist maintains all the blocks which are not in use; freelist is kept
@@ -24,6 +26,41 @@ typedef struct metadata {
  */
 
 static metadata_t* freelist = NULL;
+
+bool place_in_freelist(metadata_t* head) {
+  metadata_t *freelist_head = freelist;
+  while(freelist_head->freelist_next != NULL) {
+    if(freelist_head->size >= head->size) {
+      if(freelist_head->freelist_prev != NULL)
+        freelist_head->freelist_prev->freelist_next = head;
+      head->freelist_prev = freelist_head->freelist_prev;
+      freelist_head->freelist_prev = head;
+      head->freelist_next = freelist_head;
+      return true;
+    }
+    freelist_head = freelist_head->freelist_next;
+  }
+  freelist_head->freelist_next = head;
+  head->freelist_prev = freelist_head;
+  return true;
+}
+
+metadata_t* find_fit(size_t requested_size) {
+  metadata_t *freelist_head = freelist;
+  while(freelist_head != NULL) {
+    if(freelist_head->size >= requested_size) {
+      if(freelist_head->freelist_prev != NULL)
+        freelist_head->freelist_prev->freelist_next = freelist_head->freelist_next;
+      if(freelist_head->freelist_next != NULL)
+        freelist_head->freelist_next->freelist_prev = freelist_head->freelist_prev;
+      freelist_head->freelist_prev = NULL;
+      freelist_head->freelist_next = NULL;
+      return freelist_head;
+    }
+    freelist_head = freelist_head->freelist_next;
+  }
+  return NULL;
+}
 
 void* dmalloc(size_t numbytes) {
   /* initialize through sbrk call first time */
@@ -34,13 +71,55 @@ void* dmalloc(size_t numbytes) {
 
   assert(numbytes > 0);
 
-  /* your code here */
+  metadata_t *fit_head = find_fit(ALIGN(numbytes) + METADATA_T_ALIGNED);
+  if (fit_head != NULL) {
+    metadata_t *split_head = (metadata_t*) (((void*) (fit_head+1)) + ALIGN(numbytes));
+    split_head->size = fit_head->size - ALIGN(numbytes) - METADATA_T_ALIGNED;
+    split_head->true_prev = fit_head;
+    split_head->true_next = fit_head->true_next;
+
+    if(freelist == fit_head)
+      freelist = split_head;
+    else
+      place_in_freelist(split_head);
+
+    fit_head->size = ALIGN(numbytes);
+    fit_head->true_next = split_head;
+    fit_head->freelist_next = NULL;
+    fit_head->freelist_prev = NULL;
+    return (void*) (fit_head+1);
+  }
 	
   return NULL;
 }
 
+metadata_t* coalesc(metadata_t* head) {
+  metadata_t *head_next = head->true_next;
+  while(head_next != NULL && (head_next->freelist_next != NULL && head_next->freelist_prev != NULL)) {
+    head->size = head->size + METADATA_T_ALIGNED + head_next->size;
+    head->true_next = head_next->true_next;
+    head_next->true_next->true_prev = head;
+    head->freelist_next = head_next->freelist_next;
+    head_next->freelist_prev = head;
+    head_next = head->true_next;
+  }
+  metadata_t *head_prev = head->true_prev;
+  while(head_prev != NULL && (head_prev->freelist_next != NULL && head_prev->freelist_prev != NULL)) {
+    head_prev->size = head_prev->size + METADATA_T_ALIGNED + head->size;
+    head_prev->true_next = head->true_next;
+    if(head->true_next != NULL)
+      head->true_next->true_prev = head_prev;
+    head_prev->freelist_next = head->freelist_next;
+    if(head->freelist_next != NULL)
+      head->freelist_next->freelist_prev = head_prev;
+    head = head_prev;
+    head_prev = head_prev->true_prev;
+  }
+  return head;
+}
+
 void dfree(void* ptr) {
-  /* your code here */
+  place_in_freelist(coalesc(((metadata_t*) ptr)-1));
 }
 
 bool dmalloc_init() {
@@ -61,8 +140,10 @@ bool dmalloc_init() {
   /* Q: Why casting is used? i.e., why (void*)-1? */
   if (freelist == (void *)-1)
     return false;
-  freelist->next = NULL;
-  freelist->prev = NULL;
+  freelist->true_next = NULL;
+  freelist->true_prev = NULL;
+  freelist->freelist_next = NULL;
+  freelist->freelist_prev = NULL;
   freelist->size = max_bytes-METADATA_T_ALIGNED;
   return true;
 }
@@ -74,9 +155,9 @@ void print_freelist() {
     DEBUG("\tFreelist Size:%zd, Head:%p, Prev:%p, Next:%p\t",
 	  freelist_head->size,
 	  freelist_head,
-	  freelist_head->prev,
-	  freelist_head->next);
-    freelist_head = freelist_head->next;
+	  freelist_head->freelist_prev,
+	  freelist_head->freelist_next);
+    freelist_head = freelist_head->freelist_next;
   }
   DEBUG("\n");
 }
