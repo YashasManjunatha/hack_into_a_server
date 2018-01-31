@@ -52,6 +52,8 @@ void* dmalloc(size_t numbytes) {
     split_head->size = fit_head->size - ALIGN(numbytes) - METADATA_T_ALIGNED;
     split_head->prev = fit_head;
     split_head->next = fit_head->next;
+    if (fit_head->next != NULL)
+      fit_head->next->prev = split_head;
     split_head->free = true;
 
     fit_head->size = ALIGN(numbytes);
