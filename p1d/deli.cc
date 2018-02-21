@@ -29,7 +29,7 @@ void cashier(void* filename) {
 	int sandwich;
 	while (inFile >> sandwich) {
 		while(board.size() >= max_orders){
-			//thread_signal(LOCK, MAKER_CV);
+			thread_signal(LOCK, MAKER_CV);
 			thread_wait(LOCK, CASHIER_CV);
 		}
 		board.push_back(sandwich);
@@ -67,7 +67,7 @@ void maker(void* arg) {
 
 	while (active_cashiers > 0) {
 		while(board.size() < max_orders) {
-			thread_broadcast(LOCK, CASHIER_CV);
+			thread_signal(LOCK, CASHIER_CV);
 			thread_wait(LOCK, MAKER_CV);
 
 			if (active_cashiers < max_orders)
