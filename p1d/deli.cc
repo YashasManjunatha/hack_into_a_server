@@ -5,7 +5,7 @@
 #include "thread.h"
 using namespace std;
 
-unsigned int LOCK = 1;
+unsigned int LOCK_ID = 1;
 unsigned int CASHIER_CV = 1111;
 unsigned int MAKER_CV = 2222;
 
@@ -17,7 +17,7 @@ int current_cashier = 0;
 int last_sandwich = -1;
 
 void cashier(void* filename) {
-	thread_lock(LOCK);
+	thread_lock(LOCK_ID);
 
 	ifstream inFile;
 	inFile.open((char*) filename);
@@ -29,30 +29,34 @@ void cashier(void* filename) {
 	int sandwich;
 	while (inFile >> sandwich) {
 		while(board.size() >= max_orders){
-			thread_signal(LOCK, MAKER_CV);
-			thread_wait(LOCK, CASHIER_CV);
+			thread_signal(LOCK_ID, MAKER_CV);
+			thread_wait(LOCK_ID, CASHIER_CV);
 		}
 		board.push_back(sandwich);
 		cout << "POSTED: cashier " << cashier_num << " sandwich " << sandwich << endl;
 		
 		if (board.size() == max_orders)
-			thread_signal(LOCK, MAKER_CV);
+			thread_signal(LOCK_ID, MAKER_CV);
 
-		thread_wait(LOCK, sandwich);
+		thread_wait(LOCK_ID, sandwich);
 		cout << "READY: cashier " << cashier_num << " sandwich " << sandwich << endl;
 		
-		thread_signal(LOCK, MAKER_CV);
-		thread_wait(LOCK,CASHIER_CV);
+		thread_signal(LOCK_ID, MAKER_CV);
+		thread_wait(LOCK_ID,CASHIER_CV);
 	}
 
 	active_cashiers--;
 
-	thread_signal(LOCK,MAKER_CV);
+	thread_signal(LOCK_ID,MAKER_CV);
 
-    thread_unlock(LOCK);
+    thread_unlock(LOCK_ID);
 }
 
 void maker(void* arg) {
+	//start_preemptions(true, true, rand());
+
+	thread_lock(LOCK_ID);
+
 	char** argv = (char**) arg;
 	for (int i = 0; i < max_cashiers; i++) {
 		thread_create(cashier, argv[i + 2]);
@@ -60,21 +64,19 @@ void maker(void* arg) {
 
 	active_cashiers = max_cashiers;
 
-	thread_lock(LOCK);
-
 	int closest;
 	int closest_loc;
 
 	while (active_cashiers > 0) {
 		while(board.size() < max_orders) {
-			thread_signal(LOCK, CASHIER_CV);
-			thread_wait(LOCK, MAKER_CV);
+			thread_signal(LOCK_ID, CASHIER_CV);
+			thread_wait(LOCK_ID, MAKER_CV);
 
 			if (active_cashiers < max_orders)
 				max_orders = active_cashiers;
 
 			if (active_cashiers == 0) {
-				thread_unlock(LOCK);
+				thread_unlock(LOCK_ID);
 				return;
 			}
 		}
@@ -91,11 +93,11 @@ void maker(void* arg) {
 		last_sandwich = closest;
 		board.erase(board.begin() + closest_loc);
 
-		thread_signal(LOCK, last_sandwich);
-		thread_wait(LOCK, MAKER_CV);
+		thread_signal(LOCK_ID, last_sandwich);
+		thread_wait(LOCK_ID, MAKER_CV);
 	}
 
-	thread_unlock(LOCK);
+	thread_unlock(LOCK_ID);
 
 	return;
 }
