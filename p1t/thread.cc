@@ -3,17 +3,24 @@
 #include <ucontext.h>
 #include <stdlib.h>
 
+// useful macro borrowed from: https://linux.die.net/man/3/swapcontext
+#define handle_error(msg) \
+    do { perror(msg); exit(EXIT_FAILURE); } while (0)
+
 struct thread_t {
 	ucontext_t* 	context;
 	char*			stack;
 	bool			done;
 }
 
-static thread_t* active_thread;
+static thread_t* 	active_thread;
+static ucontext_t* 	manager_context;
 
 // fifo queues
 static queue<thread_t> ready;
 static queue<thread_t> blocked;
+
+//static map<int, queue<thread_t>> lock_map;
 
 static bool libinit_completed = false;
 
@@ -22,32 +29,34 @@ extern int thread_libinit(thread_startfunc_t func, void *arg) {
 
 	if( libinit_completed ) {
 		interrupt_enable();
-		return 1; // tries to reinitialize libinit
+		handle_error("libinit already called");
 	} else {
 		libinit_completed = true;
 	}
 
-	// create new thread. 
 	interrupt_enable();
 	thread_create(func, arg);
 	interrupt_disable();
 
-	active_thread = ready.pop_front();
-
-	setcontext(active_thread->context); // do we set or do we swap context? 
+	getcontext_ec(manager_context);
 
 	// while there are threads to run, run them....
 	while(!ready.empty()) {
+		active_thread = ready.pop_front();
+
 		if (active_thread->done) {
 			delete_thread(active_thread);
-		}
-
+		} else {
+			swapcontext_ec(manager_context, active_thread->context);
+		} // will this delete active threads that weren't on the ready queue? ==> push back in the run stub.
 	}
-	// Clean up all our memmory. 
+
+	// Clean up all our memory.
+	// for everything in blocked, clean it out.
 
 	cout << "Thread library exiting.\n";
 	interrupt_enable();
-	return 0; 
+	exit(EXIT_SUCCESS);
 }
 
 extern int thread_create(thread_startfunc_t func, void *arg) {
@@ -55,7 +64,7 @@ extern int thread_create(thread_startfunc_t func, void *arg) {
 
 	if ( !libinit_completed ) {
 		interrupt_enable();
-		return 1; // error: 1 - libinit not called successfully
+		handle_error("libinit hasn't been called before creating thread");
 	}
 
 	thread_t new_thread = new thread_t;
@@ -65,17 +74,13 @@ extern int thread_create(thread_startfunc_t func, void *arg) {
 
 	/* ---------------- Create a new context ---------------- */
 
-	if (!getcontext(new_thread->context)) {
-		interrupt_enable();
-		return 1;
-	}
+	getcontext_ec(new_thread->context);
 
 	/* -------------------Configure context ------------------------ */
 	new_thread->context->uc_stack.ss_sp 	= new_thread->stack;
 	new_thread->context->uc_stack.ss_size 	= STACK_SIZE;
 	new_thread->context->uc_stack.ss_flags 	= 0;
 	new_thread->context->uc_link 			= NULL;
-
 
 	/* ---------------- Deliver function to context ---------------- */
 	makecontext(new_thread->context, run_stub, 2, func, arg);
@@ -85,34 +90,14 @@ extern int thread_create(thread_startfunc_t func, void *arg) {
 	return 0;
 }
 
-int delete_thread(thread_t t) {
-	char* stack = t->stack;
-	delete(t->context);
-	delete(t);
-	delete(stack);
-}
-
-int run_stub(thread_startfunc_t func, void *arg) {
-	interrupt_enable();
-	func(arg);
-	interrupt_disable();
-	active_thread->done = true;
-}
-
 extern int thread_yield(void) {
-	// save current context => move to end of ready.
-	// pop head from ready => set to active
-	// new set context
 	interrupt_disable();
-	ucontext_t prevContext = active_thread->context;
+
 	ready.push_back( active_thread ); 
-	active_thread = ready.pop_front();
-	// TODO: Check to see if we should be using swap_context here because it will auto-run
-	// NOTE: if using swap_context here, enable line below
-	// interrupt_enable();
-	swap_context( prevContext, active_thread->context );
-	// interrupt_disable();
+	swap_context_ec(active_thread->context, manager_context);
+
 	interrupt_enable();
+	return 0;
 }
 
 /*///////////////////////  ^^ FINISH THESE FIRST ^^ ////////////////////////*/
@@ -135,4 +120,37 @@ extern int thread_signal(unsigned int lock, unsigned int cond) {
 
 extern int thread_broadcast(unsigned int lock, unsigned int cond) {
 
+}
+
+/* ---------------- HELPER FUNCTIONS ---------------- */
+
+void getcontext_ec(ucontext_t* a) { // error checking
+	if (!getcontext(a)) {
+		interrupt_enable();
+		handle_error("call to getcontext failed.");
+	}
+}
+
+void swap_context_ec(ucontext_t* a, ucontext_t* b) { // error checking
+	if (swap_context(a, b) == -1) {
+		interrupt_enable();
+		handle_error("call to swap_context failed.");
+	}
+}
+
+int delete_thread(thread_t t) {
+	char* stack = t->stack;
+	delete(t->context);
+	delete(t);
+	delete(stack);
+}
+
+int run_stub(thread_startfunc_t func, void *arg) {
+	interrupt_enable();
+	func(arg);
+	interrupt_disable();
+
+	active_thread->done = true;
+	ready.push_back(active_thread);
+	swap_context(active_thread->context, manager_context);
 }
