@@ -20,6 +20,8 @@ static ucontext_t* 	manager_context;
 static queue<thread_t> ready;
 static queue<thread_t> blocked;
 
+//static map<int, queue<thread_t>> lock_map;
+
 static bool libinit_completed = false;
 
 extern int thread_libinit(thread_startfunc_t func, void *arg) {
@@ -46,10 +48,11 @@ extern int thread_libinit(thread_startfunc_t func, void *arg) {
 			delete_thread(active_thread);
 		} else {
 			swapcontext_ec(manager_context, active_thread->context);
-		}
+		} // will this delete active threads that weren't on the ready queue? ==> push back in the run stub.
 	}
 
-	// Clean up all our memmory. 
+	// Clean up all our memory.
+	// for everything in blocked, clean it out.
 
 	cout << "Thread library exiting.\n";
 	interrupt_enable();
@@ -148,5 +151,6 @@ int run_stub(thread_startfunc_t func, void *arg) {
 	interrupt_disable();
 
 	active_thread->done = true;
+	ready.push_back(active_thread);
 	swap_context(active_thread->context, manager_context);
 }
