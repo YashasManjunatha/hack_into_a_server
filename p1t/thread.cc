@@ -103,6 +103,16 @@ extern int thread_yield(void) {
 	// save current context => move to end of ready.
 	// pop head from ready => set to active
 	// new set context
+	interrupt_disable();
+	ucontext_t prevContext = active_thread->context;
+	ready.push_back( active_thread ); 
+	active_thread = ready.pop_front();
+	// TODO: Check to see if we should be using swap_context here because it will auto-run
+	// NOTE: if using swap_context here, enable line below
+	// interrupt_enable();
+	swap_context( prevContext, active_thread->context );
+	// interrupt_disable();
+	interrupt_enable();
 }
 
 /*///////////////////////  ^^ FINISH THESE FIRST ^^ ////////////////////////*/
