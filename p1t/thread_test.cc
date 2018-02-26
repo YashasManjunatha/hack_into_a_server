@@ -4,7 +4,6 @@
 #include <iostream>
 #include "thread.h"
 #include <assert.h>
-#include "thread.cc"
 
 using namespace std;
 
@@ -81,19 +80,19 @@ int main(int argc, char *argv[]) {
   int testChoice = (int) *argv[1];
   switch( testChoice ){
   	case 1:
-  		if (thread_libinit( (thread_startfunc_t) case1, (void *) 1)) {
+  		if (thread_libinit(case1, (void *) 1)) {
 		    cout << "thread_libinit failed\n";
 		    exit(1);
 		  }
 		  break;
 	  case 2:
-	  	if (thread_libinit( (thread_startfunc_t) case2, (void *) 2)) {
+	  	if (thread_libinit(case2, (void *) 2)) {
 		    cout << "thread_libinit failed\n";
 		    exit(1);
 		  }
 	  	break;
 	  case 3:
-	  	if (thread_libinit( (thread_startfunc_t) case3, (void *) 3)) {
+	  	if (thread_libinit(case3, (void *) 3)) {
 		    cout << "thread_libinit failed\n";
 		    exit(1);
 		  }
