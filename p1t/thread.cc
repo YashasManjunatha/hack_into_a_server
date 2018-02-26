@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <iostream>
 #include <queue>
+#include <map>
 using namespace std;
 
 // useful macro borrowed from: https://linux.die.net/man/3/swapcontext
@@ -17,12 +18,20 @@ struct thread_t {
 	bool			done;
 };
 
+struct lock_t {
+	int 				id;
+	bool 				held;
+	queue<thread_t*>	waiting;
+};
+
 static thread_t* 	active_thread;
 static ucontext_t* 	manager_context;
 // fifo queues
 static queue<thread_t*> ready;
 static queue<thread_t*> blocked;
-//static map<int, queue<thread_t>> lock_map;
+
+static map<int, lock_t*> lock_map;
+
 static bool libinit_completed = false;
 
 /* ---------------------- FUNCTION STUB DECLARATIONS ---------------------- */
@@ -113,11 +122,49 @@ int thread_yield(void) {
 /*///////////////////////  ^^ FINISH THESE FIRST ^^ ////////////////////////*/
 
 int thread_lock(unsigned int lock) {
+	interrupt_disable();
 
+	map<int,lock_t*>::iterator it = lock_map.find(lock);
+	if (it == lock_map.end()) {
+		// not found
+		lock_t* new_lock = new lock_t;
+		new_lock->id = lock;
+		new_lock->held = true;
+		lock_map[lock] = new_lock;
+	} else {
+		// found
+		lock_t* old_lock = it->second;
+
+		if (old_lock->held) {
+			old_lock->waiting.push(active_thread);
+			swapcontext_ec(active_thread->context, manager_context);
+		} else {
+			old_lock->held = true;
+		}
+
+	}
+
+	interrupt_disable();
+	return 0;
 }
 
 int thread_unlock(unsigned int lock) {
+	interrupt_disable();
 
+	map<int,lock_t*>::iterator it = lock_map.find(lock);
+	if (it == lock_map.end()) {
+		// lock not found! what?
+	} else {
+		lock_t* old_lock = it->second;
+		if (old_lock->waiting.empty()) {
+			old_lock->held = false;
+		} else {
+			ready.push(old_lock->waiting.front());
+			old_lock->waiting.pop();
+		}
+	}
+
+	interrupt_enable();
 }
 
 int thread_wait(unsigned int lock, unsigned int cond) {
@@ -163,4 +210,4 @@ int run_stub(thread_startfunc_t func, void *arg) {
 	active_thread->done = true;
 	ready.push(active_thread);
 	swapcontext(active_thread->context, manager_context);
-}
+} 
