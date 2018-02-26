@@ -68,7 +68,28 @@ void case3(void *a) {
 	    cout << "thread_create failed\n";
 	    exit(1);
 	  }
+	  i++;
   }
+}
+
+/* ----------------------------- CASE 4 TEST ----------------------------- */
+// Creates numLoops number of threads that run the loop function with
+// parent function calling loop as well
+void case4(void *a) {
+  int arg;
+  arg = (long int) a;
+
+  cout << "case3 called with arg " << arg << endl;
+  int i = 0;
+  while( i < 7 ){
+  	if (thread_create(loop, (void *) "child thread")) {
+	    cout << "thread_create failed\n";
+	    exit(1);
+	  }
+	  i++;
+  }
+
+  loop( (void *) "parent thread");
 }
 
 /* ----------------------------- MAIN FUNCTION ----------------------------- */
@@ -78,7 +99,6 @@ int main(int argc, char *argv[]) {
   	exit(1);
   }
   int testChoice = atoi(argv[1]);
-  cout << testChoice << endl;
   switch( testChoice ){
   	case 1:
   		if (thread_libinit(case1, (void *) 1)) {
@@ -94,6 +114,12 @@ int main(int argc, char *argv[]) {
 	  	break;
 	  case 3:
 	  	if (thread_libinit(case3, (void *) 3)) {
+		    cout << "thread_libinit failed\n";
+		    exit(1);
+		  }
+	  	break;
+	  case 4:
+	  	if (thread_libinit(case4, (void *) 4)) {
 		    cout << "thread_libinit failed\n";
 		    exit(1);
 		  }
