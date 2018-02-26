@@ -133,13 +133,13 @@ int thread_broadcast(unsigned int lock, unsigned int cond) {
 /* ---------------- HELPER FUNCTIONS ---------------- */
 
 void getcontext_ec(ucontext_t* a) { // error checking
-	if (!getcontext(a)) {
+	if (getcontext(a) != 0) {
 		interrupt_enable();
 		handle_error("call to getcontext failed.");
 	}
 }
 
-void swap_context_ec(ucontext_t* a, ucontext_t* b) { // error checking
+void swapcontext_ec(ucontext_t* a, ucontext_t* b) { // error checking
 	if (swapcontext(a, b) == -1) {
 		interrupt_enable();
 		handle_error("call to swap_context failed.");
