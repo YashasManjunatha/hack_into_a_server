@@ -1,4 +1,4 @@
-// To compile: g++ thread_test.cc
+// To compile: g++ -o thread_test thread.cc thread_test.cc libinterrupt.a -ldl
 
 #include <stdlib.h>
 #include <iostream>
