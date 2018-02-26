@@ -45,6 +45,8 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 	thread_create(func, arg);
 	interrupt_disable();
 
+	manager_context = new ucontext_t;
+
 	getcontext_ec(manager_context);
 
 	// while there are threads to run, run them....
