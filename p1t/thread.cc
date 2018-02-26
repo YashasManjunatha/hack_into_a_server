@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <iostream>
 #include <queue>
-
 using namespace std;
 
 // useful macro borrowed from: https://linux.die.net/man/3/swapcontext
@@ -20,13 +19,10 @@ struct thread_t {
 
 static thread_t* 	active_thread;
 static ucontext_t* 	manager_context;
-
 // fifo queues
 static queue<thread_t*> ready;
 static queue<thread_t*> blocked;
-
 //static map<int, queue<thread_t>> lock_map;
-
 static bool libinit_completed = false;
 
 /* ---------------------- FUNCTION STUB DECLARATIONS ---------------------- */
@@ -35,7 +31,7 @@ void swapcontext_ec(ucontext_t*, ucontext_t*);
 int delete_thread(thread_t* t);
 int run_stub(thread_startfunc_t, void*);
 
-int thread_libinit(thread_startfunc_t func, void *arg) {
+int thread_libinit(thread_startfunc_t func, void* arg) {
 	interrupt_disable();
 
 	if( libinit_completed ) {
@@ -71,7 +67,7 @@ int thread_libinit(thread_startfunc_t func, void *arg) {
 	exit(EXIT_SUCCESS);
 }
 
-int thread_create(thread_startfunc_t func, void *arg) {
+int thread_create(thread_startfunc_t func, void* arg) {
 	interrupt_disable();
 
 	if ( !libinit_completed ) {
@@ -95,7 +91,7 @@ int thread_create(thread_startfunc_t func, void *arg) {
 	new_thread->context->uc_link 			= NULL;
 
 	/* ---------------- Deliver function to context ---------------- */
-	makecontext(new_thread->context, void(*)(run_stub), 2, func, arg);
+	makecontext(new_thread->context, (void (*)()) run_stub, 2, func, arg);
 
 	ready.push(new_thread);
 	interrupt_enable();
