@@ -3,7 +3,8 @@
 #include <ucontext.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <iostream>;
+#include <iostream>
+#include <queue>
 
 using namespace std;
 
@@ -21,8 +22,8 @@ static thread_t* 	active_thread;
 static ucontext_t* 	manager_context;
 
 // fifo queues
-static queue<thread_t> ready;
-static queue<thread_t> blocked;
+static queue<thread_t*> ready;
+static queue<thread_t*> blocked;
 
 //static map<int, queue<thread_t>> lock_map;
 
@@ -52,7 +53,8 @@ int thread_libinit(thread_startfunc_t func, void *arg) {
 
 	// while there are threads to run, run them....
 	while(!ready.empty()) {
-		active_thread = ready.pop_front();
+		active_thread = ready.front();
+		ready.pop();
 
 		if (active_thread->done) {
 			delete_thread(active_thread);
@@ -93,9 +95,9 @@ int thread_create(thread_startfunc_t func, void *arg) {
 	new_thread->context->uc_link 			= NULL;
 
 	/* ---------------- Deliver function to context ---------------- */
-	makecontext(new_thread->context, run_stub, 2, func, arg);
+	makecontext(new_thread->context, void(*)(run_stub), 2, func, arg);
 
-	ready.push_back(new_thread);
+	ready.push(new_thread);
 	interrupt_enable();
 	return 0;
 }
@@ -103,7 +105,7 @@ int thread_create(thread_startfunc_t func, void *arg) {
 int thread_yield(void) {
 	interrupt_disable();
 
-	ready.push_back( active_thread ); 
+	ready.push( active_thread ); 
 	swapcontext_ec(active_thread->context, manager_context);
 
 	interrupt_enable();
@@ -161,6 +163,6 @@ int run_stub(thread_startfunc_t func, void *arg) {
 	interrupt_disable();
 
 	active_thread->done = true;
-	ready.push_back(active_thread);
+	ready.push(active_thread);
 	swapcontext(active_thread->context, manager_context);
 }
