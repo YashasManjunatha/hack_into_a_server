@@ -72,6 +72,8 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 		if (active_thread->done) {
 			delete_thread(active_thread);
 		} else {
+			// I'm PRETTY certain there should be enable interrupts here... double check
+			interrupt_enable(); // TODO: WARNING, CHECK THIS IMMEDIATELY. *****
 			swapcontext_ec(manager_context, active_thread->context);
 		} // will this delete active threads that weren't on the ready queue? ==> push back in the run stub.
 	}
@@ -160,17 +162,21 @@ int thread_unlock(unsigned int lock) {
 	map<int,lock_t*>::iterator it = lock_map.find(lock);
 	if (it == lock_map.end()) {
 		// lock not found! what?
+		// TODO: Possibly throw an error. We need to keep track of such things
 	} else {
 		lock_t* old_lock = it->second;
 		if (old_lock->waiting.empty()) {
 			old_lock->held = false;
 		} else {
+			// pops off something from waiting and puts it into ready queue
+			// old_lock is still held by the new ready queue thread
 			ready.push(old_lock->waiting.front());
 			old_lock->waiting.pop();
 		}
 	}
 
 	interrupt_enable();
+	return 0;
 }
 
 int thread_wait(unsigned int lock, unsigned int cond) {
@@ -193,8 +199,10 @@ int thread_wait(unsigned int lock, unsigned int cond) {
 		swapcontext_ec(active_thread->context, manager_context);
 	}
 
+	// TODO: Double check the logic of this existing
 	thread_lock(lock);
 	interrupt_enable();
+	return 0;
 }
 
 int thread_signal(unsigned int lock, unsigned int cond) {
@@ -207,6 +215,7 @@ int thread_signal(unsigned int lock, unsigned int cond) {
 
 	if (it == cv_map.end()) {
 		// cv not found! what?
+		// TODO: Throw error
 	} else {
 		cv_t* old_cv = it->second;
 		if (!old_cv->waiting.empty()) {
@@ -229,6 +238,7 @@ int thread_broadcast(unsigned int lock, unsigned int cond) {
 
 	if (it == cv_map.end()) {
 		// cv not found! what?
+		// TODO: Throw error
 	} else {
 		cv_t* old_cv = it->second;
 		while (!old_cv->waiting.empty()) {
@@ -251,6 +261,8 @@ void getcontext_ec(ucontext_t* a) { // error checking
 }
 
 void swapcontext_ec(ucontext_t* a, ucontext_t* b) { // error checking
+	// Are we sure we shouldn't be enabling interrupts becacuse context is swapping
+	// and therefore the function SHOULD run with interrupts?
 	if (swapcontext(a, b) == -1) {
 		interrupt_enable();
 		handle_error("call to swap_context failed.");
