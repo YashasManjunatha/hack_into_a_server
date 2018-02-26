@@ -1,3 +1,5 @@
+// To compile: g++ thread_test.cc
+
 #include <stdlib.h>
 #include <iostream>
 #include "thread.h"
