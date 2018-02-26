@@ -9,8 +9,6 @@
 using namespace std;
 
 // useful macro borrowed from: https://linux.die.net/man/3/swapcontext
-#define handle_error(msg) \
-    do { perror(msg); exit(EXIT_FAILURE); } while (0);
 
 struct thread_t {
 	ucontext_t* 	context;
@@ -46,12 +44,16 @@ void swapcontext_ec(ucontext_t*, ucontext_t*);
 int delete_thread(thread_t* t);
 int run_stub(thread_startfunc_t, void*);
 
+int handle_error( void *msg ){
+    do { cout << (char *) msg << endl; return -1; } while (0);
+}
+
 int thread_libinit(thread_startfunc_t func, void* arg) {
-	//interrupt_disable();
+	// interrupt_disable();
 
 	if( libinit_completed ) {
-		//interrupt_enable();
-		handle_error("libinit already called");
+		// interrupt_enable();
+		return handle_error( (void*) "libinit already called; can't call libinit again." );
 	} else {
 		libinit_completed = true;
 	}
@@ -91,7 +93,7 @@ int thread_create(thread_startfunc_t func, void* arg) {
 
 	if ( !libinit_completed ) {
 		//interrupt_enable();
-		handle_error("libinit hasn't been called before creating thread");
+		return handle_error( (void*) "libinit hasn't been called before creating thread" );
 	}
 
 	thread_t* new_thread = new thread_t;
@@ -118,6 +120,12 @@ int thread_create(thread_startfunc_t func, void* arg) {
 }
 
 int thread_yield(void) {
+
+	if ( !libinit_completed ) {
+		//interrupt_enable();
+		return handle_error( (void*) "libinit hasn't been called before yielding thread" );
+	}
+
 	//interrupt_disable();
 
 	ready.push( active_thread ); 
@@ -130,6 +138,12 @@ int thread_yield(void) {
 /*///////////////////////  ^^ FINISH THESE FIRST ^^ ////////////////////////*/
 
 int thread_lock(unsigned int lock) {
+
+	if ( !libinit_completed ) {
+		//interrupt_enable();
+		return handle_error( (void*) "libinit hasn't been called before locking thread" );
+	}
+
 	//interrupt_disable();
 
 	map<int,lock_t*>::iterator it = lock_map.find(lock);
@@ -157,6 +171,12 @@ int thread_lock(unsigned int lock) {
 }
 
 int thread_unlock(unsigned int lock) {
+
+	if ( !libinit_completed ) {
+		//interrupt_enable();
+		return handle_error( (void*) "libinit hasn't been called before unlocking thread" );
+	}
+
 	//interrupt_disable();
 
 	map<int,lock_t*>::iterator it = lock_map.find(lock);
@@ -180,6 +200,12 @@ int thread_unlock(unsigned int lock) {
 }
 
 int thread_wait(unsigned int lock, unsigned int cond) {
+
+	if ( !libinit_completed ) {
+		//interrupt_enable();
+		return handle_error( (void*) "libinit hasn't been called before waiting for thread cv" );
+	}
+
 	//interrupt_disable();
 	thread_unlock(lock);
 
@@ -206,6 +232,12 @@ int thread_wait(unsigned int lock, unsigned int cond) {
 }
 
 int thread_signal(unsigned int lock, unsigned int cond) {
+
+	if ( !libinit_completed ) {
+		//interrupt_enable();
+		return handle_error( (void*) "libinit hasn't been called before signallig thread" );
+	}
+
 	//interrupt_disable();
 
 	// If the CV waiter queue is not empty, a thread wakes up: it moves from the head of
@@ -230,6 +262,12 @@ int thread_signal(unsigned int lock, unsigned int cond) {
 }
 
 int thread_broadcast(unsigned int lock, unsigned int cond) {
+
+	if ( !libinit_completed ) {
+		//interrupt_enable();
+		return handle_error( (void*) "libinit hasn't been called before broadcasting to threads." );
+	}
+
 	//interrupt_disable();
 
 	// If the CV waiter queue is not empty, a thread wakes up: it moves from the head of
@@ -258,7 +296,7 @@ int thread_broadcast(unsigned int lock, unsigned int cond) {
 void getcontext_ec(ucontext_t* a) { // error checking
 	if (getcontext(a) != 0) {
 		//interrupt_enable();
-		handle_error("call to getcontext failed.");
+		handle_error( (void*) "call to getcontext failed." );
 	}
 }
 
@@ -267,7 +305,7 @@ void swapcontext_ec(ucontext_t* a, ucontext_t* b) { // error checking
 	// and therefore the function SHOULD run with interrupts?
 	if (swapcontext(a, b) == -1) {
 		//interrupt_enable();
-		handle_error("call to swap_context failed.");
+		handle_error( (void*) "call to swap_context failed." );
 	}
 }
 
