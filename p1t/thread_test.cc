@@ -32,7 +32,7 @@ void case1(void *a) {
   arg = (long int) a;
 
   cout << "case1 called with arg " << arg << endl;
-  if (thread_create((thread_startfunc_t) loop, (void *) "child thread")) {
+  if (thread_create(loop, (void *) "child thread")) {
     cout << "thread_create failed\n";
     exit(1);
   }
@@ -46,7 +46,7 @@ void case2(void *a) {
   arg = (long int) a;
 
   cout << "case2 called with arg " << arg << endl;
-  if (thread_create((thread_startfunc_t) loop, (void *) "child thread")) {
+  if (thread_create(loop, (void *) "child thread")) {
     cout << "thread_create failed\n";
     exit(1);
   }
@@ -63,7 +63,7 @@ void case3(void *a) {
   cout << "case3 called with arg " << arg << endl;
   int i = 0;
   while( i < 7 ){
-  	if (thread_create((thread_startfunc_t) loop, (void *) "child thread")) {
+  	if (thread_create(loop, (void *) "child thread")) {
 	    cout << "thread_create failed\n";
 	    exit(1);
 	  }

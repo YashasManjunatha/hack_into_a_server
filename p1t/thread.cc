@@ -2,16 +2,20 @@
 #include "interrupt.h"
 #include <ucontext.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <iostream>;
+
+using namespace std;
 
 // useful macro borrowed from: https://linux.die.net/man/3/swapcontext
 #define handle_error(msg) \
-    do { perror(msg); exit(EXIT_FAILURE); } while (0)
+    do { perror(msg); exit(EXIT_FAILURE); } while (0);
 
 struct thread_t {
 	ucontext_t* 	context;
 	char*			stack;
 	bool			done;
-}
+};
 
 static thread_t* 	active_thread;
 static ucontext_t* 	manager_context;
@@ -23,6 +27,12 @@ static queue<thread_t> blocked;
 //static map<int, queue<thread_t>> lock_map;
 
 static bool libinit_completed = false;
+
+/* ---------------------- FUNCTION STUB DECLARATIONS ---------------------- */
+void getcontext_ec(ucontext_t*);
+void swapcontext_ec(ucontext_t*, ucontext_t*);
+int delete_thread(thread_t* t);
+int run_stub(thread_startfunc_t, void*);
 
 int thread_libinit(thread_startfunc_t func, void *arg) {
 	interrupt_disable();
@@ -67,7 +77,7 @@ int thread_create(thread_startfunc_t func, void *arg) {
 		handle_error("libinit hasn't been called before creating thread");
 	}
 
-	thread_t new_thread = new thread_t;
+	thread_t* new_thread = new thread_t;
 	new_thread->context = new ucontext_t;
 	new_thread->stack 	= new char[STACK_SIZE];
 	new_thread->done	= false;
@@ -94,7 +104,7 @@ int thread_yield(void) {
 	interrupt_disable();
 
 	ready.push_back( active_thread ); 
-	swap_context_ec(active_thread->context, manager_context);
+	swapcontext_ec(active_thread->context, manager_context);
 
 	interrupt_enable();
 	return 0;
@@ -132,13 +142,13 @@ void getcontext_ec(ucontext_t* a) { // error checking
 }
 
 void swap_context_ec(ucontext_t* a, ucontext_t* b) { // error checking
-	if (swap_context(a, b) == -1) {
+	if (swapcontext(a, b) == -1) {
 		interrupt_enable();
 		handle_error("call to swap_context failed.");
 	}
 }
 
-int delete_thread(thread_t t) {
+int delete_thread(thread_t* t) {
 	char* stack = t->stack;
 	delete(t->context);
 	delete(t);
@@ -152,5 +162,5 @@ int run_stub(thread_startfunc_t func, void *arg) {
 
 	active_thread->done = true;
 	ready.push_back(active_thread);
-	swap_context(active_thread->context, manager_context);
+	swapcontext(active_thread->context, manager_context);
 }
