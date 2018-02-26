@@ -77,7 +77,8 @@ int main(int argc, char *argv[]) {
   	cout << "Input must select at least one test\n";
   	exit(1);
   }
-  int testChoice = (int) *argv[1];
+  int testChoice = atoi(argv[1]);
+  cout << testChoice << endl;
   switch( testChoice ){
   	case 1:
   		if (thread_libinit(case1, (void *) 1)) {
