@@ -24,13 +24,19 @@ struct lock_t {
 	queue<thread_t*>	waiting;
 };
 
+struct cv_t {
+	int 				id;
+	queue<thread_t*>	waiting;
+};
+
 static thread_t* 	active_thread;
 static ucontext_t* 	manager_context;
 // fifo queues
 static queue<thread_t*> ready;
 static queue<thread_t*> blocked;
 
-static map<int, lock_t*> lock_map;
+static map<int, lock_t*> 	lock_map;
+static map<int, cv_t*> 		cv_map;
 
 static bool libinit_completed = false;
 
@@ -168,15 +174,71 @@ int thread_unlock(unsigned int lock) {
 }
 
 int thread_wait(unsigned int lock, unsigned int cond) {
+	interrupt_disable();
+	thread_unlock(lock);
 
+	map<int,cv_t*>::iterator it = cv_map.find(cond);
+
+	if (it == cv_map.end()) {
+		// not found
+		cv_t* new_cv = new cv_t;
+		new_cv->id = cond;
+		new_cv->waiting.push(active_thread);
+		cv_map[cond] = new_cv;
+		swapcontext_ec(active_thread->context, manager_context);
+	} else {
+		// found
+		cv_t* old_cv = it->second;
+		old_cv->waiting.push(active_thread);
+		swapcontext_ec(active_thread->context, manager_context);
+	}
+
+	thread_lock(lock);
+	interrupt_enable();
 }
 
 int thread_signal(unsigned int lock, unsigned int cond) {
+	interrupt_disable();
 
+	// If the CV waiter queue is not empty, a thread wakes up: it moves from the head of
+	// the CV waiter queue to the tail of the ready queue (blocked -> ready).
+
+	map<int,cv_t*>::iterator it = cv_map.find(cond);
+
+	if (it == cv_map.end()) {
+		// cv not found! what?
+	} else {
+		cv_t* old_cv = it->second;
+		if (!old_cv->waiting.empty()) {
+			ready.push(old_cv->waiting.front());
+			old_cv->waiting.pop();
+		}
+	}
+
+
+	interrupt_enable();
 }
 
 int thread_broadcast(unsigned int lock, unsigned int cond) {
+	interrupt_disable();
 
+	// If the CV waiter queue is not empty, a thread wakes up: it moves from the head of
+	// the CV waiter queue to the tail of the ready queue (blocked -> ready).
+
+	map<int,cv_t*>::iterator it = cv_map.find(cond);
+
+	if (it == cv_map.end()) {
+		// cv not found! what?
+	} else {
+		cv_t* old_cv = it->second;
+		while (!old_cv->waiting.empty()) {
+			ready.push(old_cv->waiting.front());
+			old_cv->waiting.pop();
+		}
+	}
+
+
+	interrupt_enable();
 }
 
 /* ---------------- HELPER FUNCTIONS ---------------- */
