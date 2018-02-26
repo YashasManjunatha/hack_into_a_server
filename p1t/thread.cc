@@ -24,7 +24,7 @@ static queue<thread_t> blocked;
 
 static bool libinit_completed = false;
 
-extern int thread_libinit(thread_startfunc_t func, void *arg) {
+int thread_libinit(thread_startfunc_t func, void *arg) {
 	interrupt_disable();
 
 	if( libinit_completed ) {
@@ -59,7 +59,7 @@ extern int thread_libinit(thread_startfunc_t func, void *arg) {
 	exit(EXIT_SUCCESS);
 }
 
-extern int thread_create(thread_startfunc_t func, void *arg) {
+int thread_create(thread_startfunc_t func, void *arg) {
 	interrupt_disable();
 
 	if ( !libinit_completed ) {
@@ -90,7 +90,7 @@ extern int thread_create(thread_startfunc_t func, void *arg) {
 	return 0;
 }
 
-extern int thread_yield(void) {
+int thread_yield(void) {
 	interrupt_disable();
 
 	ready.push_back( active_thread ); 
@@ -102,23 +102,23 @@ extern int thread_yield(void) {
 
 /*///////////////////////  ^^ FINISH THESE FIRST ^^ ////////////////////////*/
 
-extern int thread_lock(unsigned int lock) {
+int thread_lock(unsigned int lock) {
 
 }
 
-extern int thread_unlock(unsigned int lock) {
+int thread_unlock(unsigned int lock) {
 
 }
 
-extern int thread_wait(unsigned int lock, unsigned int cond) {
+int thread_wait(unsigned int lock, unsigned int cond) {
 
 }
 
-extern int thread_signal(unsigned int lock, unsigned int cond) {
+int thread_signal(unsigned int lock, unsigned int cond) {
 
 }
 
-extern int thread_broadcast(unsigned int lock, unsigned int cond) {
+int thread_broadcast(unsigned int lock, unsigned int cond) {
 
 }
 

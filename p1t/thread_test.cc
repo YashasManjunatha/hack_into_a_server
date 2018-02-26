@@ -2,6 +2,7 @@
 #include <iostream>
 #include "thread.h"
 #include <assert.h>
+#include "thread.cc"
 
 using namespace std;
 
