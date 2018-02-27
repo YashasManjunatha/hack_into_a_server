@@ -40,8 +40,8 @@ static map<int, cv_t*> 		cv_map;
 static bool libinit_completed = false;
 
 /* ---------------------- FUNCTION STUB DECLARATIONS ---------------------- */
-void getcontext_ec(ucontext_t*);
-void swapcontext_ec(ucontext_t*, ucontext_t*);
+int getcontext_ec(ucontext_t*);
+int swapcontext_ec(ucontext_t*, ucontext_t*);
 int delete_thread(thread_t* t);
 int run_stub(thread_startfunc_t, void*);
 
@@ -89,11 +89,15 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 		libinit_completed = true;
 	}
 
-	thread_create_helper(func, arg);
+	if (thread_create_helper(func, arg) == -1) {
+		return -1;
+	}
 
 	manager_context = new ucontext_t;
 
-	getcontext_ec(manager_context);
+	if (getcontext_ec(manager_context) == -1) {
+		return -1;
+	}
 
 	// while there are threads to run, run them....
 	while(!ready.empty()) {
@@ -101,11 +105,15 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 		ready.pop();
 
 		if (active_thread->done) {
-			delete_thread(active_thread);
+			if (delete_thread(active_thread) == -1) {
+				return -1;
+			}
 		} else {
 			// I'm PRETTY certain there should be enable interrupts here... double check
 			// interrupt_disable(); // TODO: WARNING, CHECK THIS IMMEDIATELY. *****
-			swapcontext_ec(manager_context, active_thread->context);
+			if (swapcontext_ec(manager_context, active_thread->context) == -1) {
+				return -1;
+			}
 		} // will this delete active threads that weren't on the ready queue? ==> push back in the run stub.
 	}
 
@@ -219,7 +227,9 @@ int thread_create_helper(thread_startfunc_t func, void* arg) {
 
 		/* ---------------- Create a new context ---------------- */
 
-		getcontext_ec(new_thread->context);
+		if (getcontext_ec(new_thread->context) == -1) {
+			return -1;
+		}
 
 		/* -------------------Configure context ------------------------ */
 		new_thread->context->uc_stack.ss_sp 	= new_thread->stack;
@@ -245,7 +255,9 @@ int thread_yield_helper(void) {
 		}
 
 		ready.push( active_thread );
-		swapcontext_ec(active_thread->context, manager_context); // flag: swapcontext to manager
+		if (swapcontext_ec(active_thread->context, manager_context) == -1) {
+			return -1; // flag: swapcontext to manager
+		}
 	} catch( int e ){
 		return -1;
 	}
@@ -277,7 +289,9 @@ int thread_lock_helper(unsigned int lock) {
 					return handle_error( "thread has tried to acquire a lock it already holds!" );
 				}
 				old_lock->waiting.push(active_thread);
-				swapcontext_ec(active_thread->context, manager_context);
+				if (swapcontext_ec(active_thread->context, manager_context) == -1){
+					return -1;
+				}
 			} else {
 				// gives lock to the active Thread
 				old_lock->held = true;
@@ -335,7 +349,9 @@ int thread_wait_helper(unsigned int lock, unsigned int cond) {
 			return handle_error( "libinit hasn't been called before waiting for thread cv" );
 		}
 
-		thread_unlock_helper(lock);
+		if (thread_unlock_helper(lock) == -1) {
+			return -1;
+		}
 
 		map<int,cv_t*>::iterator it = cv_map.find(cond);
 
@@ -345,15 +361,21 @@ int thread_wait_helper(unsigned int lock, unsigned int cond) {
 			new_cv->id = cond;
 			new_cv->waiting.push(active_thread);
 			cv_map[cond] = new_cv;
-			swapcontext_ec(active_thread->context, manager_context); // flag: swapcontext to manager
+			if (swapcontext_ec(active_thread->context, manager_context) == -1) {
+				return -1; // flag: swapcontext to manager
+			}
 		} else {
 			// found
 			cv_t* old_cv = it->second;
 			old_cv->waiting.push(active_thread);
-			swapcontext_ec(active_thread->context, manager_context); // flag: swapcontext to manager
+			if (swapcontext_ec(active_thread->context, manager_context) == -1) {
+				return -1; // flag: swapcontext to manager
+			}
 		}
 
-		thread_lock_helper(lock);
+		if (thread_lock_helper(lock) == -1) {
+			return -1;
+		}
 		// interrupt_enable(); // lock ends up with interrupts enabled, so this is redundant
 	} catch( int e ){
 		return -1;
@@ -421,20 +443,22 @@ int thread_broadcast_helper(unsigned int lock, unsigned int cond) {
 
 /* ---------------- HELPER FUNCTIONS ---------------- */
 
-void getcontext_ec(ucontext_t* a) { // error checking
+int getcontext_ec(ucontext_t* a) { // error checking
 	if (getcontext(a) != 0) {
 		//interrupt_enable(); // Taken care of in handle_error
-		handle_error( "call to getcontext failed." );
+		return handle_error( "call to getcontext failed." );
 	}
+	return 0;
 }
 
 // Assumptions: STARTS interrupt_disable, ENDS interrupt_disable
-void swapcontext_ec(ucontext_t* a, ucontext_t* b) { // error checking
+int swapcontext_ec(ucontext_t* a, ucontext_t* b) { // error checking
 	// Are we sure we shouldn't be enabling interrupts becacuse context is swapping
 	// and therefore the function SHOULD run with interrupts?
 	if (swapcontext(a, b) == -1) {
-		handle_error( "call to swap_context failed." );
+		return handle_error( "call to swap_context failed." );
 	}
+	return 0;
 }
 
 // Assumptions: START interrupt_disable, ENDS interrupt_disable
