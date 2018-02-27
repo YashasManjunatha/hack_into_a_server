@@ -67,6 +67,11 @@ if(thread_signal(1, 5) != -1) {
   	exit(1);
   }
 
+  if (g == 15) {
+  	cout << "SUCCESS" << endl;
+  	return;
+  }
+
 if(thread_signal(2, 1) != -1) {
   	cout << "thread signal fail on id 2 cv 1\n";
   	exit(1);
@@ -133,7 +138,7 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  if (g != 14) {
+  if (g != 15) {
   	cout << "Test FAILED\n";
   	exit(1);
   }
