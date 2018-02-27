@@ -17,7 +17,8 @@ void test(void *a) {
   for (i=0; i<5; i++) {
     cout << id << ":\t" << i << "\n";
     if (thread_lock(g)) {
-      cout << "thread_lock tried to acquire the same lock\n";
+      cout << "Test6 should have successfully displayed that the thread tried to " \
+              "acquire a lock it already had!\n";
       exit(1);
     }
   }
