@@ -111,9 +111,9 @@ void launch(void *a) {
    		exit(1);
   	}
   	if(thread_yield()) {
-		cout << "thread_yield failed\n";
-      	exit(1);
-	}
+  		cout << "thread_yield failed\n";
+        	exit(1);
+  	}
   }
 
   if(thread_signal(1, 5) != -1) {

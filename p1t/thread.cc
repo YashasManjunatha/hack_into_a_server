@@ -34,8 +34,8 @@ static ucontext_t* 	manager_context;
 static queue<thread_t*> ready;
 static queue<thread_t*> blocked;
 
-static map<int, lock_t*> 	lock_map;
-static map<int, cv_t*> 		cv_map;
+static map<int, lock_t*> 			lock_map;
+static map<int, map<int, cv_t*> > 	cv_map;
 
 static bool libinit_completed = false;
 
@@ -74,7 +74,7 @@ int thread_broadcast_helper(unsigned int lock, unsigned int cond);
 int handle_error( const std::string& msg ){
     // do { cout << (char *) msg << endl; return -1; } while (0);
     // TODO: GET RID OF THIS LINE BEFORE WE SUBMIT IT!!!
-    //cout << msg << "\n";
+    cout << msg << "\n";
     return -1;
 }
 
@@ -357,30 +357,42 @@ int thread_wait_helper(unsigned int lock, unsigned int cond) {
 			return -1;
 		}
 
-		map<int,cv_t*>::iterator it = cv_map.find(cond);
+		map< int,map<int,cv_t*> >::iterator lockIter = cv_map.find(lock);
 
-		if (it == cv_map.end()) {
-			// not found
+		if (lockIter == cv_map.end()) {
+			// Did not find the lock in the condition variable queue
 			cv_t* new_cv = new cv_t;
 			new_cv->id = cond;
 			new_cv->waiting.push(active_thread);
-			cv_map[cond] = new_cv;
+			cv_map[lock][cond] = new_cv;
 			if (swapcontext_ec(active_thread->context, manager_context) == -1) {
 				return -1; // flag: swapcontext to manager
 			}
 		} else {
-			// found
-			cv_t* old_cv = it->second;
-			old_cv->waiting.push(active_thread);
-			if (swapcontext_ec(active_thread->context, manager_context) == -1) {
-				return -1; // flag: swapcontext to manager
+			// Found the lock in the condition variable queue
+			map<int,cv_t*>::iterator cvIter = cv_map[lock].find(cond);
+			if( cvIter == cv_map[lock].end() ){
+				// Did not find the condition variable in the specific lock
+				cv_t* new_cv = new cv_t;
+				new_cv->id = cond;
+				new_cv->waiting.push(active_thread);
+				cv_map[lock][cond] = new_cv;
+				if (swapcontext_ec(active_thread->context, manager_context) == -1) {
+					return -1; // flag: swapcontext to manager
+				}
+			} else {
+				// Found condition variable in the specific lock
+				cv_t* old_cv = cv_map[lock][cond];
+				old_cv->waiting.push(active_thread);
+				if (swapcontext_ec(active_thread->context, manager_context) == -1) {
+					return -1; // flag: swapcontext to manager
+				}
 			}
 		}
 
 		if (thread_lock_helper(lock) == -1) {
 			return -1;
 		}
-		// interrupt_enable(); // lock ends up with interrupts enabled, so this is redundant
 	} catch( int e ){
 		return -1;
 	}
@@ -398,16 +410,20 @@ int thread_signal_helper(unsigned int lock, unsigned int cond) {
 		// If the CV waiter queue is not empty, a thread wakes up: it moves from the head of
 		// the CV waiter queue to the tail of the ready queue (blocked -> ready).
 
-		map<int,cv_t*>::iterator it = cv_map.find(cond);
+		map< int,map<int,cv_t*> >::iterator lockIter = cv_map.find(lock);
 
-		if (it == cv_map.end()) {
-			// Is okay that CV is not found when signalling.
-			return handle_error("signal cv not found");
+		if (lockIter == cv_map.end()) {
+			// Is okay that lock is not found when signalling. Nothing happens.
 		} else {
-			cv_t* old_cv = it->second;
-			if (!old_cv->waiting.empty()) {
-				ready.push(old_cv->waiting.front());
-				old_cv->waiting.pop();
+			map<int,cv_t*>::iterator cvIter = cv_map[lock].find(cond);
+			if (cvIter == cv_map[lock].end()) {
+				// Is okay that CV is not found when signalling.
+			} else {
+				cv_t* old_cv = cv_map[lock][cond];
+				if (!old_cv->waiting.empty()) {
+					ready.push(old_cv->waiting.front());
+					old_cv->waiting.pop();
+				}
 			}
 		}
 	} catch( int e ){
@@ -427,17 +443,20 @@ int thread_broadcast_helper(unsigned int lock, unsigned int cond) {
 		// If the CV waiter queue is not empty, a thread wakes up: it moves from the head of
 		// the CV waiter queue to the tail of the ready queue (blocked -> ready).
 
-		map<int,cv_t*>::iterator it = cv_map.find(cond);
+		map< int,map<int,cv_t*> >::iterator lockIter = cv_map.find(lock);
 
-		if (it == cv_map.end()) {
-			// cv not found! what?
-			// TODO: Throw error
-			return handle_error("boradcast cv not found");
+		if (lockIter == cv_map.end()) {
+			// nothing to signal! Not a big deal.
 		} else {
-			cv_t* old_cv = it->second;
-			while (!old_cv->waiting.empty()) {
-				ready.push(old_cv->waiting.front());
-				old_cv->waiting.pop();
+			map<int,cv_t*>::iterator cvIter = cv_map[lock].find(cond);
+			if (cvIter == cv_map[lock].end()) {
+				// nothing to broadcast to! Not a big deal.
+			} else {
+				cv_t* old_cv = cv_map[lock][cond];
+				while (!old_cv->waiting.empty()) {
+					ready.push(old_cv->waiting.front());
+					old_cv->waiting.pop();
+				}
 			}
 		}
 	} catch( int e ){
