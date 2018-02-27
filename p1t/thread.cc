@@ -73,7 +73,8 @@ int thread_broadcast_helper(unsigned int lock, unsigned int cond);
 
 int handle_error( const std::string& msg ){
     // do { cout << (char *) msg << endl; return -1; } while (0);
-    cout << msg;
+    // TODO: GET RID OF THIS LINE BEFORE WE SUBMIT IT!!!
+    cout << msg << "\n";
     return -1;
 }
 
@@ -307,8 +308,11 @@ int thread_unlock_helper(unsigned int lock) {
 			lock_t* old_lock = it->second;
 
 			// Throw error if thread tries to unlock lock it doesn't own!
-			if( old_lock->holderID != active_thread ){
+			if( old_lock->held && old_lock->holderID != active_thread ){
 				return handle_error( "thread_unlock has tried to unlock lock that it doesn't own!" );
+			}
+			if( !old_lock->held ){
+				return handle_error( "thread_unlock has tried to unlock lock that is already unlocked!" );
 			}
 
 			if (old_lock->waiting.empty()) {
