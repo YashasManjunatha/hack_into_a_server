@@ -57,12 +57,12 @@ void loop(void *a) {
       	exit(1);
 	}
 
-if(thread_signal(1, 5) != -1) {
+if(thread_signal(1, 5) == -1) {
   	cout << "thread signal fail\n";
   	exit(1);
   }
 
-  if (thread_broadcast(1, 4) != -1) {
+  if (thread_broadcast(1, 4) == -1) {
   	cout << "thread_broadcast fail\n";
   	exit(1);
   }
@@ -72,12 +72,12 @@ if(thread_signal(1, 5) != -1) {
   	return;
   }
 
-if(thread_signal(2, 1) != -1) {
+if(thread_signal(2, 1) == -1) {
   	cout << "thread signal fail on id 2 cv 1\n";
   	exit(1);
   }
 
-  if (thread_broadcast(5, 4) != -1) {
+  if (thread_broadcast(5, 4) == -1) {
   	cout << "thread_broadcast fail\n";
   	exit(1);
   }
@@ -116,12 +116,12 @@ void launch(void *a) {
   	}
   }
 
-  if(thread_signal(1, 5) != -1) {
+  if(thread_signal(1, 5) == -1) {
   	cout << "thread signal fail on id 1 cv 5\n";
   	exit(1);
   }
 
-  if (thread_broadcast(1, 4) != -1) {
+  if (thread_broadcast(1, 4) == -1) {
   	cout << "thread_broadcast fail\n";
   	exit(1);
   }
