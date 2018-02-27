@@ -74,7 +74,7 @@ int thread_broadcast_helper(unsigned int lock, unsigned int cond);
 int handle_error( const std::string& msg ){
     // do { cout << (char *) msg << endl; return -1; } while (0);
     // TODO: GET RID OF THIS LINE BEFORE WE SUBMIT IT!!!
-    cout << msg << "\n";
+    //cout << msg << "\n";
     return -1;
 }
 
