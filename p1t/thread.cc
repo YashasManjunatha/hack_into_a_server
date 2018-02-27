@@ -71,18 +71,20 @@ int thread_broadcast_helper(unsigned int lock, unsigned int cond);
     do { cout << (char *) msg << endl; interrupt_enable(); return -1; } while (0);
 } */
 
-int handle_error( void *msg ){
+int handle_error( const std::string& msg ){
     // do { cout << (char *) msg << endl; return -1; } while (0);
+    cout << msg;
     return -1;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_libinit(thread_startfunc_t func, void* arg) {
+	assert_interrupts_enabled();
 	interrupt_disable();
 
 	if( libinit_completed ) {
 		// interrupt_enable(); // Taken care of in handle_error
-		return handle_error( (void*) "libinit already called; can't call libinit again." );
+		return handle_error( "libinit already called; can't call libinit again." );
 	} else {
 		libinit_completed = true;
 	}
@@ -111,26 +113,31 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 	// for everything in blocked, clean it out.
 
 	cout << "Thread library exiting.\n";
+	assert_interrupts_disabled();
 	interrupt_enable();
 	exit(EXIT_SUCCESS);
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_create(thread_startfunc_t func, void* arg) {
+	assert_interrupts_enabled();
 	interrupt_disable();
 
 	int success = thread_create_helper( func, arg );
 
+	assert_interrupts_disabled();
 	interrupt_enable();
 	return success;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_yield(void) {
+	assert_interrupts_enabled();
 	interrupt_disable();
 
 	int success = thread_yield_helper();
 
+	assert_interrupts_disabled();
 	interrupt_enable();
 	return success;
 }
@@ -139,50 +146,60 @@ int thread_yield(void) {
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_lock(unsigned int lock) {
+	assert_interrupts_enabled();
 	interrupt_disable();
 
 	int success = thread_lock_helper( lock );
 
+	assert_interrupts_disabled();
 	interrupt_enable();
 	return success;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_unlock(unsigned int lock) {
+	assert_interrupts_enabled();
 	interrupt_disable();
 
 	int success = thread_unlock_helper( lock );
 
+	assert_interrupts_disabled();
 	interrupt_enable();
 	return success;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_wait(unsigned int lock, unsigned int cond) {
+	assert_interrupts_enabled();
 	interrupt_disable();
 
 	int success = thread_wait_helper( lock, cond );
 
+	assert_interrupts_disabled();
 	interrupt_enable();
 	return success;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_signal(unsigned int lock, unsigned int cond) {
+	assert_interrupts_enabled();
 	interrupt_disable();
 
 	int success = thread_signal_helper( lock, cond );
 
+	assert_interrupts_disabled();
 	interrupt_enable();
 	return success;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_broadcast(unsigned int lock, unsigned int cond) {
+	assert_interrupts_enabled();
 	interrupt_disable();
 
 	int success = thread_broadcast_helper( lock, cond );
 
+	assert_interrupts_disabled();
 	interrupt_enable();
 	return success;
 }
@@ -192,7 +209,7 @@ int thread_broadcast(unsigned int lock, unsigned int cond) {
 int thread_create_helper(thread_startfunc_t func, void* arg) {
 	try{
 		if ( !libinit_completed ) {
-			return handle_error( (void*) "libinit hasn't been called before creating thread" );
+			return handle_error( "libinit hasn't been called before creating thread" );
 		}
 
 		thread_t* new_thread = new thread_t;
@@ -224,7 +241,7 @@ int thread_create_helper(thread_startfunc_t func, void* arg) {
 int thread_yield_helper(void) {
 	try{
 		if ( !libinit_completed ) {
-			return handle_error( (void*) "libinit hasn't been called before yielding thread" );
+			return handle_error( "libinit hasn't been called before yielding thread" );
 		}
 
 		ready.push( active_thread );
@@ -239,7 +256,7 @@ int thread_yield_helper(void) {
 int thread_lock_helper(unsigned int lock) {
 	try{
 		if ( !libinit_completed ) {
-			return handle_error( (void*) "libinit hasn't been called before locking thread!" );
+			return handle_error( "libinit hasn't been called before locking thread!" );
 		}
 
 		map<int,lock_t*>::iterator it = lock_map.find(lock);
@@ -257,7 +274,7 @@ int thread_lock_helper(unsigned int lock) {
 			if (old_lock->held) {
 				// Throw error if holder already holds this lock
 				if( old_lock->holderID == active_thread ) {
-					return handle_error( (void*) "thread has tried to acquire a lock it already holds!" );
+					return handle_error( "thread has tried to acquire a lock it already holds!" );
 				}
 				old_lock->waiting.push(active_thread);
 				swapcontext_ec(active_thread->context, manager_context);
@@ -278,20 +295,20 @@ int thread_lock_helper(unsigned int lock) {
 int thread_unlock_helper(unsigned int lock) {
 	try{
 		if ( !libinit_completed ) {
-			return handle_error( (void*) "libinit hasn't been called before unlocking thread" );
+			return handle_error( "libinit hasn't been called before unlocking thread" );
 		}
 
 		map<int,lock_t*>::iterator it = lock_map.find(lock);
 		if (it == lock_map.end()) {
 			// lock not found! what?
 			// TODO: Possibly throw an error. We need to keep track of such things
-			return handle_error( (void*) "thread_unlock has tried to find lock, but couldn't!" );
+			return handle_error( "thread_unlock has tried to find lock, but couldn't!" );
 		} else {
 			lock_t* old_lock = it->second;
 
 			// Throw error if thread tries to unlock lock it doesn't own!
 			if( old_lock->holderID != active_thread ){
-				return handle_error( (void*) "thread_unlock has tried to unlock lock that it doesn't own!" );
+				return handle_error( "thread_unlock has tried to unlock lock that it doesn't own!" );
 			}
 
 			if (old_lock->waiting.empty()) {
@@ -315,7 +332,7 @@ int thread_wait_helper(unsigned int lock, unsigned int cond) {
 	try{
 		if ( !libinit_completed ) {
 			//interrupt_enable(); // Taken care of in handle_error
-			return handle_error( (void*) "libinit hasn't been called before waiting for thread cv" );
+			return handle_error( "libinit hasn't been called before waiting for thread cv" );
 		}
 
 		thread_unlock_helper(lock);
@@ -349,7 +366,7 @@ int thread_signal_helper(unsigned int lock, unsigned int cond) {
 	try{
 		if ( !libinit_completed ) {
 			//interrupt_enable(); // Taken care of in handle_error
-			return handle_error( (void*) "libinit hasn't been called before signalling thread" );
+			return handle_error( "libinit hasn't been called before signalling thread" );
 		}
 
 		// If the CV waiter queue is not empty, a thread wakes up: it moves from the head of
@@ -358,9 +375,7 @@ int thread_signal_helper(unsigned int lock, unsigned int cond) {
 		map<int,cv_t*>::iterator it = cv_map.find(cond);
 
 		if (it == cv_map.end()) {
-			// cv not found! what?
-			// TODO: Throw error
-			return handle_error( (void*) "thread_signal has tried to find condition variable, but couldn't!" );
+			// Is okay that CV is not found when signalling.
 		} else {
 			cv_t* old_cv = it->second;
 			if (!old_cv->waiting.empty()) {
@@ -379,7 +394,7 @@ int thread_broadcast_helper(unsigned int lock, unsigned int cond) {
 	try{
 		if ( !libinit_completed ) {
 			//interrupt_enable(); // Taken care of in handle_error
-			return handle_error( (void*) "libinit hasn't been called before broadcasting to threads." );
+			return handle_error( "libinit hasn't been called before broadcasting to threads." );
 		}
 
 		// If the CV waiter queue is not empty, a thread wakes up: it moves from the head of
@@ -409,7 +424,7 @@ int thread_broadcast_helper(unsigned int lock, unsigned int cond) {
 void getcontext_ec(ucontext_t* a) { // error checking
 	if (getcontext(a) != 0) {
 		//interrupt_enable(); // Taken care of in handle_error
-		handle_error( (void*) "call to getcontext failed." );
+		handle_error( "call to getcontext failed." );
 	}
 }
 
@@ -418,7 +433,7 @@ void swapcontext_ec(ucontext_t* a, ucontext_t* b) { // error checking
 	// Are we sure we shouldn't be enabling interrupts becacuse context is swapping
 	// and therefore the function SHOULD run with interrupts?
 	if (swapcontext(a, b) == -1) {
-		handle_error( (void*) "call to swap_context failed." );
+		handle_error( "call to swap_context failed." );
 	}
 }
 
@@ -439,9 +454,9 @@ int delete_thread(thread_t* t) {
 
 int run_stub(thread_startfunc_t func, void *arg) {
 	try{
-		interrupt_enable();
+		assert_interrupts_disabled(); interrupt_enable();
 		func(arg);
-		interrupt_disable();
+		assert_interrupts_enabled(); interrupt_disable();
 
 		active_thread->done = true;
 		ready.push(active_thread);
