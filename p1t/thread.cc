@@ -19,6 +19,7 @@ struct thread_t {
 struct lock_t {
 	int 				id;
 	bool 				held;
+	thread_t* 			holderID;
 	queue<thread_t*>	waiting;
 };
 
@@ -118,20 +119,20 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 int thread_create(thread_startfunc_t func, void* arg) {
 	interrupt_disable();
 
-	thread_create_helper( func, arg );
+	int success = thread_create_helper( func, arg );
 
 	interrupt_enable();
-	return 0;
+	return success;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_yield(void) {
 	interrupt_disable();
 
-	thread_yield_helper();
+	int success = thread_yield_helper();
 
 	interrupt_enable();
-	return 0;
+	return success;
 }
 
 /*///////////////////////  ^^ FINISH THESE FIRST ^^ ////////////////////////*/
@@ -140,220 +141,264 @@ int thread_yield(void) {
 int thread_lock(unsigned int lock) {
 	interrupt_disable();
 
-	thread_lock_helper( lock );
+	int success = thread_lock_helper( lock );
 
 	interrupt_enable();
-	return 0;
+	return success;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_unlock(unsigned int lock) {
 	interrupt_disable();
 
-	thread_unlock_helper( lock );
+	int success = thread_unlock_helper( lock );
 
 	interrupt_enable();
-	return 0;
+	return success;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_wait(unsigned int lock, unsigned int cond) {
 	interrupt_disable();
 
-	thread_wait_helper( lock, cond );
+	int success = thread_wait_helper( lock, cond );
 
 	interrupt_enable();
-	return 0;
+	return success;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_signal(unsigned int lock, unsigned int cond) {
 	interrupt_disable();
 
-	thread_signal_helper( lock, cond );
+	int success = thread_signal_helper( lock, cond );
 
 	interrupt_enable();
-	return 0;
+	return success;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_broadcast(unsigned int lock, unsigned int cond) {
 	interrupt_disable();
 
-	thread_broadcast_helper( lock, cond );
+	int success = thread_broadcast_helper( lock, cond );
 
 	interrupt_enable();
-	return 0;
+	return success;
 }
 
 /* ---------------- HELPER THREAD FX ---------------- */
 
 int thread_create_helper(thread_startfunc_t func, void* arg) {
-	if ( !libinit_completed ) {
-		//interrupt_enable(); // Taken care of in handle_error
-		return handle_error( (void*) "libinit hasn't been called before creating thread" );
+	try{
+		if ( !libinit_completed ) {
+			return handle_error( (void*) "libinit hasn't been called before creating thread" );
+		}
+
+		thread_t* new_thread = new thread_t;
+		new_thread->context = new ucontext_t;
+		new_thread->stack 	= new char[STACK_SIZE];
+		new_thread->done	= false;
+
+		/* ---------------- Create a new context ---------------- */
+
+		getcontext_ec(new_thread->context);
+
+		/* -------------------Configure context ------------------------ */
+		new_thread->context->uc_stack.ss_sp 	= new_thread->stack;
+		new_thread->context->uc_stack.ss_size 	= STACK_SIZE;
+		new_thread->context->uc_stack.ss_flags 	= 0;
+		new_thread->context->uc_link 			= NULL;
+
+		/* ---------------- Deliver function to context ---------------- */
+		makecontext(new_thread->context, (void (*)()) run_stub, 2, func, arg);
+
+		ready.push(new_thread);
+	} catch(int e) {
+		return -1;
 	}
-
-	thread_t* new_thread = new thread_t;
-	new_thread->context = new ucontext_t;
-	new_thread->stack 	= new char[STACK_SIZE];
-	new_thread->done	= false;
-
-	/* ---------------- Create a new context ---------------- */
-
-	getcontext_ec(new_thread->context);
-
-	/* -------------------Configure context ------------------------ */
-	new_thread->context->uc_stack.ss_sp 	= new_thread->stack;
-	new_thread->context->uc_stack.ss_size 	= STACK_SIZE;
-	new_thread->context->uc_stack.ss_flags 	= 0;
-	new_thread->context->uc_link 			= NULL;
-
-	/* ---------------- Deliver function to context ---------------- */
-	makecontext(new_thread->context, (void (*)()) run_stub, 2, func, arg);
-
-	ready.push(new_thread);
+	
 	return 0;
 }
 
 int thread_yield_helper(void) {
-	if ( !libinit_completed ) {
-		//interrupt_enable(); // Taken care of in handle_error
-		return handle_error( (void*) "libinit hasn't been called before yielding thread" );
-	}
+	try{
+		if ( !libinit_completed ) {
+			return handle_error( (void*) "libinit hasn't been called before yielding thread" );
+		}
 
-	ready.push( active_thread );
-	swapcontext_ec(active_thread->context, manager_context); // flag: swapcontext to manager
+		ready.push( active_thread );
+		swapcontext_ec(active_thread->context, manager_context); // flag: swapcontext to manager
+	} catch( int e ){
+		return -1;
+	}
 
 	return 0;
 }
 
 int thread_lock_helper(unsigned int lock) {
-	if ( !libinit_completed ) {
-		return handle_error( (void*) "libinit hasn't been called before locking thread" );
-	}
-
-	map<int,lock_t*>::iterator it = lock_map.find(lock);
-	if (it == lock_map.end()) {
-		// not found
-		lock_t* new_lock = new lock_t;
-		new_lock->id = lock;
-		new_lock->held = true;
-		lock_map[lock] = new_lock;
-	} else {
-		// found
-		lock_t* old_lock = it->second;
-
-		if (old_lock->held) {
-			old_lock->waiting.push(active_thread);
-			swapcontext_ec(active_thread->context, manager_context);
-		} else {
-			old_lock->held = true;
+	try{
+		if ( !libinit_completed ) {
+			return handle_error( (void*) "libinit hasn't been called before locking thread!" );
 		}
 
+		map<int,lock_t*>::iterator it = lock_map.find(lock);
+		if (it == lock_map.end()) {
+			// not found
+			lock_t* new_lock = new lock_t;
+			new_lock->id = lock;
+			new_lock->held = true;
+			new_lock->holderID = active_thread;
+			lock_map[lock] = new_lock;
+		} else {
+			// found
+			lock_t* old_lock = it->second;
+
+			if (old_lock->held) {
+				// Throw error if holder already holds this lock
+				if( old_lock->holderID == active_thread ) {
+					return handle_error( (void*) "thread has tried to acquire a lock it already holds!" );
+				}
+				old_lock->waiting.push(active_thread);
+				swapcontext_ec(active_thread->context, manager_context);
+			} else {
+				// gives lock to the active Thread
+				old_lock->held = true;
+				old_lock->holderID = active_thread;
+			}
+
+		}
+	} catch( int e ){
+		return -1;
 	}
 
 	return 0;
 }
 
 int thread_unlock_helper(unsigned int lock) {
-	if ( !libinit_completed ) {
-		return handle_error( (void*) "libinit hasn't been called before unlocking thread" );
-	}
-
-	map<int,lock_t*>::iterator it = lock_map.find(lock);
-	if (it == lock_map.end()) {
-		// lock not found! what?
-		// TODO: Possibly throw an error. We need to keep track of such things
-	} else {
-		lock_t* old_lock = it->second;
-		if (old_lock->waiting.empty()) {
-			old_lock->held = false;
-		} else {
-			// pops off something from waiting and puts it into ready queue
-			// old_lock is still held by the new ready queue thread
-			ready.push(old_lock->waiting.front());
-			old_lock->waiting.pop();
+	try{
+		if ( !libinit_completed ) {
+			return handle_error( (void*) "libinit hasn't been called before unlocking thread" );
 		}
+
+		map<int,lock_t*>::iterator it = lock_map.find(lock);
+		if (it == lock_map.end()) {
+			// lock not found! what?
+			// TODO: Possibly throw an error. We need to keep track of such things
+			return handle_error( (void*) "thread_unlock has tried to find lock, but couldn't!" );
+		} else {
+			lock_t* old_lock = it->second;
+
+			// Throw error if thread tries to unlock lock it doesn't own!
+			if( old_lock->holderID != active_thread ){
+				return handle_error( (void*) "thread_unlock has tried to unlock lock that it doesn't own!" );
+			}
+
+			if (old_lock->waiting.empty()) {
+				old_lock->held = false;
+			} else {
+				// pops off something from waiting and puts it into ready queue
+				// old_lock is still held by the new ready queue thread
+				ready.push(old_lock->waiting.front());
+				old_lock->holderID = old_lock->waiting.front();
+				old_lock->waiting.pop();
+			}
+		}
+	} catch( int e ){
+		return -1;
 	}
 
 	return 0;
 }
 
 int thread_wait_helper(unsigned int lock, unsigned int cond) {
-	if ( !libinit_completed ) {
-		//interrupt_enable(); // Taken care of in handle_error
-		return handle_error( (void*) "libinit hasn't been called before waiting for thread cv" );
+	try{
+		if ( !libinit_completed ) {
+			//interrupt_enable(); // Taken care of in handle_error
+			return handle_error( (void*) "libinit hasn't been called before waiting for thread cv" );
+		}
+
+		thread_unlock_helper(lock);
+
+		map<int,cv_t*>::iterator it = cv_map.find(cond);
+
+		if (it == cv_map.end()) {
+			// not found
+			cv_t* new_cv = new cv_t;
+			new_cv->id = cond;
+			new_cv->waiting.push(active_thread);
+			cv_map[cond] = new_cv;
+			swapcontext_ec(active_thread->context, manager_context); // flag: swapcontext to manager
+		} else {
+			// found
+			cv_t* old_cv = it->second;
+			old_cv->waiting.push(active_thread);
+			swapcontext_ec(active_thread->context, manager_context); // flag: swapcontext to manager
+		}
+
+		thread_lock_helper(lock);
+		// interrupt_enable(); // lock ends up with interrupts enabled, so this is redundant
+	} catch( int e ){
+		return -1;
 	}
-
-	thread_unlock_helper(lock);
-
-	map<int,cv_t*>::iterator it = cv_map.find(cond);
-
-	if (it == cv_map.end()) {
-		// not found
-		cv_t* new_cv = new cv_t;
-		new_cv->id = cond;
-		new_cv->waiting.push(active_thread);
-		cv_map[cond] = new_cv;
-		swapcontext_ec(active_thread->context, manager_context); // flag: swapcontext to manager
-	} else {
-		// found
-		cv_t* old_cv = it->second;
-		old_cv->waiting.push(active_thread);
-		swapcontext_ec(active_thread->context, manager_context); // flag: swapcontext to manager
-	}
-
-	thread_lock_helper(lock);
-	// interrupt_enable(); // lock ends up with interrupts enabled, so this is redundant
+	
 	return 0;
 }
 
 int thread_signal_helper(unsigned int lock, unsigned int cond) {
-	if ( !libinit_completed ) {
-		//interrupt_enable(); // Taken care of in handle_error
-		return handle_error( (void*) "libinit hasn't been called before signalling thread" );
-	}
-
-	// If the CV waiter queue is not empty, a thread wakes up: it moves from the head of
-	// the CV waiter queue to the tail of the ready queue (blocked -> ready).
-
-	map<int,cv_t*>::iterator it = cv_map.find(cond);
-
-	if (it == cv_map.end()) {
-		// cv not found! what?
-		// TODO: Throw error
-	} else {
-		cv_t* old_cv = it->second;
-		if (!old_cv->waiting.empty()) {
-			ready.push(old_cv->waiting.front());
-			old_cv->waiting.pop();
+	try{
+		if ( !libinit_completed ) {
+			//interrupt_enable(); // Taken care of in handle_error
+			return handle_error( (void*) "libinit hasn't been called before signalling thread" );
 		}
-	}
 
+		// If the CV waiter queue is not empty, a thread wakes up: it moves from the head of
+		// the CV waiter queue to the tail of the ready queue (blocked -> ready).
+
+		map<int,cv_t*>::iterator it = cv_map.find(cond);
+
+		if (it == cv_map.end()) {
+			// cv not found! what?
+			// TODO: Throw error
+			return handle_error( (void*) "thread_signal has tried to find condition variable, but couldn't!" );
+		} else {
+			cv_t* old_cv = it->second;
+			if (!old_cv->waiting.empty()) {
+				ready.push(old_cv->waiting.front());
+				old_cv->waiting.pop();
+			}
+		}
+	} catch( int e ){
+		return -1;
+	}
+	
 	return 0;
 }
 
 int thread_broadcast_helper(unsigned int lock, unsigned int cond) {
-	if ( !libinit_completed ) {
-		//interrupt_enable(); // Taken care of in handle_error
-		return handle_error( (void*) "libinit hasn't been called before broadcasting to threads." );
-	}
-
-	// If the CV waiter queue is not empty, a thread wakes up: it moves from the head of
-	// the CV waiter queue to the tail of the ready queue (blocked -> ready).
-
-	map<int,cv_t*>::iterator it = cv_map.find(cond);
-
-	if (it == cv_map.end()) {
-		// cv not found! what?
-		// TODO: Throw error
-	} else {
-		cv_t* old_cv = it->second;
-		while (!old_cv->waiting.empty()) {
-			ready.push(old_cv->waiting.front());
-			old_cv->waiting.pop();
+	try{
+		if ( !libinit_completed ) {
+			//interrupt_enable(); // Taken care of in handle_error
+			return handle_error( (void*) "libinit hasn't been called before broadcasting to threads." );
 		}
+
+		// If the CV waiter queue is not empty, a thread wakes up: it moves from the head of
+		// the CV waiter queue to the tail of the ready queue (blocked -> ready).
+
+		map<int,cv_t*>::iterator it = cv_map.find(cond);
+
+		if (it == cv_map.end()) {
+			// cv not found! what?
+			// TODO: Throw error
+		} else {
+			cv_t* old_cv = it->second;
+			while (!old_cv->waiting.empty()) {
+				ready.push(old_cv->waiting.front());
+				old_cv->waiting.pop();
+			}
+		}
+	} catch( int e ){
+		return -1;
 	}
 
 	return 0;
@@ -380,20 +425,30 @@ void swapcontext_ec(ucontext_t* a, ucontext_t* b) { // error checking
 // Assumptions: START interrupt_disable, ENDS interrupt_disable
 // NOTE: DO NOT NEED TO INTERRUPT_DISABLE because it does shit
 int delete_thread(thread_t* t) {
-	char* stack = t->stack;
-	delete(t->context);
-	delete(t);
-	delete(stack);
+	try{
+		char* stack = t->stack;
+		delete(t->context);
+		delete(t);
+		delete(stack);
+	} catch( int e ){
+		return -1;
+	}
+	
 	return 0;
 }
 
 int run_stub(thread_startfunc_t func, void *arg) {
-	interrupt_enable();
-	func(arg);
-	interrupt_disable();
+	try{
+		interrupt_enable();
+		func(arg);
+		interrupt_disable();
 
-	active_thread->done = true;
-	ready.push(active_thread);
-	swapcontext(active_thread->context, manager_context); // flag: swapcontext to manager
+		active_thread->done = true;
+		ready.push(active_thread);
+		swapcontext(active_thread->context, manager_context); // flag: swapcontext to manager
+	} catch( int e ){
+		return -1;
+	}
+
 	return 0;
 } 
