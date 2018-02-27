@@ -41,7 +41,9 @@ void loop(void *a) {
 	if (g != 5) {
 		cout << "test failed\n";
 		exit(1);
-	}
+	} else {
+    cout << "SUCCESS\n";
+  }
 
 	if (thread_unlock(2) != -1) {
   		cout << "thread unlock on not previously existing lock\n";
