@@ -42,6 +42,6 @@ int main(int argc, char *argv[]) {
   if (thread_broadcast(1, 2) != -1) {
     exit(1); 
   }
-
+  cout << "library successfully throws errors when called without libinit.\n";
   exit(0);
 }
