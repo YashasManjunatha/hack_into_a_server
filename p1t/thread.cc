@@ -44,6 +44,19 @@ void swapcontext_ec(ucontext_t*, ucontext_t*);
 int delete_thread(thread_t* t);
 int run_stub(thread_startfunc_t, void*);
 
+/* -------------------------------------------------------------------------- */
+/* 					MAJOR INTERRUPT ASSUMPTIONS FOR ALL FILE				  */
+/* -------------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------------
+	MAJOR INTERRUPT ASSUMPTIONS FOR ALL FILES
+	1) All thread files (e.g. libinit, yield, create, etc.) START assuming that
+		interrupt is enabled, and END with interrupt enabled as well.
+	2) swap_context assumes that it STARTS with interrupts disabled, and it
+		ENDS with interrupts disabled as well
+	3) handle_error STARTS with interrupt disabled, and ENDS with interrupt
+		enabled!
+ ---------------------------------------------------------------------------- */
+
 //	Assumptions: STARTS interrupt_disable, ENDS interrupt_enable
 int handle_error( void *msg ){
     do { cout << (char *) msg << endl; interrupt_enable(); return -1; } while (0);
@@ -231,7 +244,6 @@ int thread_wait(unsigned int lock, unsigned int cond) {
 		swapcontext_ec(active_thread->context, manager_context); // flag: swapcontext to manager
 	}
 
-	// TODO: Double check the logic of this existing
 	interrupt_enable();
 	thread_lock(lock);
 	// interrupt_enable(); // lock ends up with interrupts enabled, so this is redundant
