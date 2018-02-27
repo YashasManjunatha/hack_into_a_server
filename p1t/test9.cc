@@ -11,8 +11,13 @@ using namespace std;
 void case1(void *a) {
   int arg;
   arg = (long int) a;
-  if (thread_wait(1, 1) == -1) {
+  if (thread_wait(1, 1) != -1) {
   	exit(1);
+  }
+
+  thread_lock(2);
+  if (thread_wait(1, 1) != -1) {
+    exit(1);
   }
 }
 

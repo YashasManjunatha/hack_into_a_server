@@ -14,9 +14,11 @@ void test(void *a) {
   id = (char *) a;
   cout << "test called with id " << (char *) id << endl;
 
+  thread_lock(g);
+
   for (i=0; i<5; i++) {
     cout << id << ":\t" << i << "\n";
-    if (thread_lock(g)) {
+    if (thread_lock(g) != -1) {
       cout << "Test6 should have successfully displayed that the thread tried to " \
               "acquire a lock it already had!\n";
       exit(1);

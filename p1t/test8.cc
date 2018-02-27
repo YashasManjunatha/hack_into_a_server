@@ -25,7 +25,7 @@ void test(void *a) {
       exit(1);
     }
   }
-  if( thread_unlock(g) ){
+  if( thread_unlock(g) != -1 ){
     cout << "Test8 should have successfully displayed that the thread tried to " \
             "unlock a lock it didn't have!\n";
     exit(1);
