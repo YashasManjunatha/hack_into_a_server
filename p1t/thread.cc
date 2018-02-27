@@ -44,23 +44,25 @@ void swapcontext_ec(ucontext_t*, ucontext_t*);
 int delete_thread(thread_t* t);
 int run_stub(thread_startfunc_t, void*);
 
+//	Assumptions: STARTS interrupt_disable, ENDS interrupt_enable
 int handle_error( void *msg ){
-    do { cout << (char *) msg << endl; return -1; } while (0);
+    do { cout << (char *) msg << endl; interrupt_enable(); return -1; } while (0);
 }
 
+//	Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_libinit(thread_startfunc_t func, void* arg) {
-	// interrupt_disable();
+	interrupt_disable();
 
 	if( libinit_completed ) {
-		// interrupt_enable();
+		// interrupt_enable(); // Taken care of in handle_error
 		return handle_error( (void*) "libinit already called; can't call libinit again." );
 	} else {
 		libinit_completed = true;
 	}
 
-	//interrupt_enable();
+	interrupt_enable();
 	thread_create(func, arg);
-	//interrupt_disable();
+	interrupt_disable();
 
 	manager_context = new ucontext_t;
 
@@ -75,7 +77,7 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 			delete_thread(active_thread);
 		} else {
 			// I'm PRETTY certain there should be enable interrupts here... double check
-			//interrupt_disable(); // TODO: WARNING, CHECK THIS IMMEDIATELY. *****
+			// interrupt_disable(); // TODO: WARNING, CHECK THIS IMMEDIATELY. *****
 			swapcontext_ec(manager_context, active_thread->context);
 		} // will this delete active threads that weren't on the ready queue? ==> push back in the run stub.
 	}
@@ -84,12 +86,13 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 	// for everything in blocked, clean it out.
 
 	cout << "Thread library exiting.\n";
-	//interrupt_enable();
+	interrupt_enable();
 	exit(EXIT_SUCCESS);
 }
 
+//	Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_create(thread_startfunc_t func, void* arg) {
-	//interrupt_disable();
+	interrupt_disable();
 
 	if ( !libinit_completed ) {
 		//interrupt_enable();
@@ -115,36 +118,36 @@ int thread_create(thread_startfunc_t func, void* arg) {
 	makecontext(new_thread->context, (void (*)()) run_stub, 2, func, arg);
 
 	ready.push(new_thread);
-	//interrupt_enable();
+	interrupt_enable();
 	return 0;
 }
 
+//	Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_yield(void) {
+	interrupt_disable();
 
 	if ( !libinit_completed ) {
 		//interrupt_enable();
 		return handle_error( (void*) "libinit hasn't been called before yielding thread" );
 	}
 
-	//interrupt_disable();
+	ready.push( active_thread );
+	swapcontext_ec(active_thread->context, manager_context); // flag: swapcontext to manager
 
-	ready.push( active_thread ); 
-	swapcontext_ec(active_thread->context, manager_context);
-
-	//interrupt_enable();
+	interrupt_enable();
 	return 0;
 }
 
 /*///////////////////////  ^^ FINISH THESE FIRST ^^ ////////////////////////*/
 
+//	Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_lock(unsigned int lock) {
+	interrupt_disable();
 
 	if ( !libinit_completed ) {
 		//interrupt_enable();
 		return handle_error( (void*) "libinit hasn't been called before locking thread" );
 	}
-
-	//interrupt_disable();
 
 	map<int,lock_t*>::iterator it = lock_map.find(lock);
 	if (it == lock_map.end()) {
@@ -166,18 +169,18 @@ int thread_lock(unsigned int lock) {
 
 	}
 
-	//interrupt_disable();
+	interrupt_enable();
 	return 0;
 }
 
+//	Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_unlock(unsigned int lock) {
+	interrupt_disable();
 
 	if ( !libinit_completed ) {
 		//interrupt_enable();
 		return handle_error( (void*) "libinit hasn't been called before unlocking thread" );
 	}
-
-	//interrupt_disable();
 
 	map<int,lock_t*>::iterator it = lock_map.find(lock);
 	if (it == lock_map.end()) {
@@ -195,19 +198,22 @@ int thread_unlock(unsigned int lock) {
 		}
 	}
 
-	//interrupt_enable();
+	interrupt_enable();
 	return 0;
 }
 
+//	Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_wait(unsigned int lock, unsigned int cond) {
+	interrupt_disable();
 
 	if ( !libinit_completed ) {
 		//interrupt_enable();
 		return handle_error( (void*) "libinit hasn't been called before waiting for thread cv" );
 	}
 
-	//interrupt_disable();
+	interrupt_enable();
 	thread_unlock(lock);
+	interrupt_disable();
 
 	map<int,cv_t*>::iterator it = cv_map.find(cond);
 
@@ -217,28 +223,29 @@ int thread_wait(unsigned int lock, unsigned int cond) {
 		new_cv->id = cond;
 		new_cv->waiting.push(active_thread);
 		cv_map[cond] = new_cv;
-		swapcontext_ec(active_thread->context, manager_context);
+		swapcontext_ec(active_thread->context, manager_context); // flag: swapcontext to manager
 	} else {
 		// found
 		cv_t* old_cv = it->second;
 		old_cv->waiting.push(active_thread);
-		swapcontext_ec(active_thread->context, manager_context);
+		swapcontext_ec(active_thread->context, manager_context); // flag: swapcontext to manager
 	}
 
 	// TODO: Double check the logic of this existing
+	interrupt_enable();
 	thread_lock(lock);
-	//interrupt_enable();
+	// interrupt_enable(); // lock ends up with interrupts enabled, so this is redundant
 	return 0;
 }
 
+//	Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_signal(unsigned int lock, unsigned int cond) {
+	interrupt_disable();
 
 	if ( !libinit_completed ) {
 		//interrupt_enable();
-		return handle_error( (void*) "libinit hasn't been called before signallig thread" );
+		return handle_error( (void*) "libinit hasn't been called before signalling thread" );
 	}
-
-	//interrupt_disable();
 
 	// If the CV waiter queue is not empty, a thread wakes up: it moves from the head of
 	// the CV waiter queue to the tail of the ready queue (blocked -> ready).
@@ -256,19 +263,18 @@ int thread_signal(unsigned int lock, unsigned int cond) {
 		}
 	}
 
-
-	//interrupt_enable();
+	interrupt_enable();
 	return 0;
 }
 
+//	Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_broadcast(unsigned int lock, unsigned int cond) {
+	interrupt_disable();
 
 	if ( !libinit_completed ) {
 		//interrupt_enable();
 		return handle_error( (void*) "libinit hasn't been called before broadcasting to threads." );
 	}
-
-	//interrupt_disable();
 
 	// If the CV waiter queue is not empty, a thread wakes up: it moves from the head of
 	// the CV waiter queue to the tail of the ready queue (blocked -> ready).
@@ -286,8 +292,7 @@ int thread_broadcast(unsigned int lock, unsigned int cond) {
 		}
 	}
 
-
-	//interrupt_enable();
+	interrupt_enable();
 	return 0;
 }
 
@@ -300,12 +305,16 @@ void getcontext_ec(ucontext_t* a) { // error checking
 	}
 }
 
+//	Assumptions: STARTS interrupt_disable, ENDS interrupt_disable
 void swapcontext_ec(ucontext_t* a, ucontext_t* b) { // error checking
 	// Are we sure we shouldn't be enabling interrupts becacuse context is swapping
 	// and therefore the function SHOULD run with interrupts?
+	interrupt_enable();
 	if (swapcontext(a, b) == -1) {
-		//interrupt_enable();
+		interrupt_disable();
 		handle_error( (void*) "call to swap_context failed." );
+	} else {
+		interrupt_disable();
 	}
 }
 
@@ -324,6 +333,6 @@ int run_stub(thread_startfunc_t func, void *arg) {
 
 	active_thread->done = true;
 	ready.push(active_thread);
-	swapcontext(active_thread->context, manager_context);
+	swapcontext(active_thread->context, manager_context); // flag: swapcontext to manager
 	return 0;
 } 
