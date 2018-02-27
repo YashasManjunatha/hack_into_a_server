@@ -80,7 +80,7 @@ int handle_error( const std::string& msg ){
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_libinit(thread_startfunc_t func, void* arg) {
-	assert_interrupts_enabled();
+	//assert_interrupts_enabled();
 	interrupt_disable();
 
 	if( libinit_completed ) {
@@ -122,31 +122,31 @@ int thread_libinit(thread_startfunc_t func, void* arg) {
 	// for everything in blocked, clean it out.
 
 	cout << "Thread library exiting.\n";
-	assert_interrupts_disabled();
+	//assert_interrupts_disabled();
 	interrupt_enable();
 	exit(EXIT_SUCCESS);
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_create(thread_startfunc_t func, void* arg) {
-	assert_interrupts_enabled();
+	//assert_interrupts_enabled();
 	interrupt_disable();
 
 	int success = thread_create_helper( func, arg );
 
-	assert_interrupts_disabled();
+	//assert_interrupts_disabled();
 	interrupt_enable();
 	return success;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_yield(void) {
-	assert_interrupts_enabled();
+	//assert_interrupts_enabled();
 	interrupt_disable();
 
 	int success = thread_yield_helper();
 
-	assert_interrupts_disabled();
+	//assert_interrupts_disabled();
 	interrupt_enable();
 	return success;
 }
@@ -155,60 +155,60 @@ int thread_yield(void) {
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_lock(unsigned int lock) {
-	assert_interrupts_enabled();
+	//assert_interrupts_enabled();
 	interrupt_disable();
 
 	int success = thread_lock_helper( lock );
 
-	assert_interrupts_disabled();
+	//assert_interrupts_disabled();
 	interrupt_enable();
 	return success;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_unlock(unsigned int lock) {
-	assert_interrupts_enabled();
+	//assert_interrupts_enabled();
 	interrupt_disable();
 
 	int success = thread_unlock_helper( lock );
 
-	assert_interrupts_disabled();
+	//assert_interrupts_disabled();
 	interrupt_enable();
 	return success;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_wait(unsigned int lock, unsigned int cond) {
-	assert_interrupts_enabled();
+	//assert_interrupts_enabled();
 	interrupt_disable();
 
 	int success = thread_wait_helper( lock, cond );
 
-	assert_interrupts_disabled();
+	//assert_interrupts_disabled();
 	interrupt_enable();
 	return success;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_signal(unsigned int lock, unsigned int cond) {
-	assert_interrupts_enabled();
+	//assert_interrupts_enabled();
 	interrupt_disable();
 
 	int success = thread_signal_helper( lock, cond );
 
-	assert_interrupts_disabled();
+	//assert_interrupts_disabled();
 	interrupt_enable();
 	return success;
 }
 
 // Assumptions: STARTS interrupt_enable, ENDS interrupt_enable
 int thread_broadcast(unsigned int lock, unsigned int cond) {
-	assert_interrupts_enabled();
+	//assert_interrupts_enabled();
 	interrupt_disable();
 
 	int success = thread_broadcast_helper( lock, cond );
 
-	assert_interrupts_disabled();
+	//assert_interrupts_disabled();
 	interrupt_enable();
 	return success;
 }
@@ -402,6 +402,7 @@ int thread_signal_helper(unsigned int lock, unsigned int cond) {
 
 		if (it == cv_map.end()) {
 			// Is okay that CV is not found when signalling.
+			return handle_error("signal cv not found");
 		} else {
 			cv_t* old_cv = it->second;
 			if (!old_cv->waiting.empty()) {
@@ -431,6 +432,7 @@ int thread_broadcast_helper(unsigned int lock, unsigned int cond) {
 		if (it == cv_map.end()) {
 			// cv not found! what?
 			// TODO: Throw error
+			return handle_error("boradcast cv not found");
 		} else {
 			cv_t* old_cv = it->second;
 			while (!old_cv->waiting.empty()) {
@@ -482,9 +484,11 @@ int delete_thread(thread_t* t) {
 
 int run_stub(thread_startfunc_t func, void *arg) {
 	try{
-		assert_interrupts_disabled(); interrupt_enable();
+		//assert_interrupts_disabled(); 
+		interrupt_enable();
 		func(arg);
-		assert_interrupts_enabled(); interrupt_disable();
+		//assert_interrupts_enabled(); 
+		interrupt_disable();
 
 		active_thread->done = true;
 		ready.push(active_thread);
