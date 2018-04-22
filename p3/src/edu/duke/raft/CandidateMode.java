@@ -3,6 +3,13 @@ package edu.duke.raft;
 public class CandidateMode extends RaftMode {
   public void go () {
     synchronized (mLock) {
+
+      // self.term++; // Increment term to indicate start of new election
+      // electionCountTimer.start();
+      // Declare election
+      // electionStart(); // This will invoke the requestVoteRPC of all other servers
+
+
       int term = 0;      
       System.out.println ("S" + 
 			  mID + 
@@ -23,6 +30,11 @@ public class CandidateMode extends RaftMode {
 			  int lastLogIndex,
 			  int lastLogTerm) {
     synchronized (mLock) {
+
+      // If in CandidateMode, already voted for self so return term
+      // likely a bit more sophisiticated than this. 
+      // return self.term
+
       int term = mConfig.getCurrentTerm ();
       int result = term;
       return result;
@@ -45,6 +57,10 @@ public class CandidateMode extends RaftMode {
 			    Entry[] entries,
 			    int leaderCommit) {
     synchronized (mLock) {
+
+      // Two cases: 1. Stale leader, 2. Stale candidate
+
+
       int term = mConfig.getCurrentTerm ();
       int result = term;
       return result;
@@ -54,6 +70,19 @@ public class CandidateMode extends RaftMode {
   // @param id of the timer that timed out
   public void handleTimeout (int timerID) {
     synchronized (mLock) {
+
+      // Either: 1. Won election (become leader), 2. Lost election (become follower)
+      // 3. Still waiting on vote (reset timeout)
+
+
+      // if(won)
+      //    RaftModeImpl.switchMode((LeaderMode) self);
+      // elif(lost)
+      //  RaftModeImpl.switchMode((FollowerMode) self);
+      //else
+      //    electionCountTimer.reset();
+
+
     }
   }
 }

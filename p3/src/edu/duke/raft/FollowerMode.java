@@ -1,8 +1,18 @@
 package edu.duke.raft;
 
+// notes:
+
+// Respond to RPCs from candidates and leaders
+// If election timeout elapses without receiving AppendEntries
+// RPC from current leader or granting vote to candidate:
+// convert to candidate
+
 public class FollowerMode extends RaftMode {
   public void go () {
     synchronized (mLock) {
+
+      // start heartbeat timer 
+
       int term = 0;
       System.out.println ("S" + 
 			  mID + 
@@ -23,6 +33,15 @@ public class FollowerMode extends RaftMode {
 			  int lastLogIndex,
 			  int lastLogTerm) {
     synchronized (mLock) {
+
+      // Either: 1. Vote for server (return 0)
+      // 2. Don’t vote for server return term
+
+      //if (shouldVote) // Compare terms, then logs
+      //  return 0;
+      //else
+      //  return self.term;
+
       int term = mConfig.getCurrentTerm ();
       int vote = term;
       return vote;
@@ -45,6 +64,10 @@ public class FollowerMode extends RaftMode {
 			    Entry[] entries,
 			    int leaderCommit) {
     synchronized (mLock) {
+
+    // 1. Check if appendEntriesRPC came from leader
+    // 2. If so, reset timer, and attempt to repair log
+
       int term = mConfig.getCurrentTerm ();
       int result = term;
       return result;
@@ -53,6 +76,10 @@ public class FollowerMode extends RaftMode {
 
   // @param id of the timer that timed out
   public void handleTimeout (int timerID) {
+
+    // If timer goes off, hold election
+    // RaftModeImpl.switchMode((CandidateMode) self);
+
     synchronized (mLock) {
     }
   }
