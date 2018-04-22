@@ -3,6 +3,10 @@ package edu.duke.raft;
 public class LeaderMode extends RaftMode {
   public void go () {
     synchronized (mLock) {
+
+      // heartbeatTimer.start();
+      // logReplication(); // Will call appendEntriesRPC of all servers
+
       int term = 0;
       System.out.println ("S" + 
 			  mID + 
@@ -23,6 +27,15 @@ public class LeaderMode extends RaftMode {
 			  int lastLogIndex,
 			  int lastLogTerm) {
     synchronized (mLock) {
+
+      // Determine if requester has larger term, step down if this is the case and
+      // vote for them
+      // if (notRealLeader)
+      //    RaftModeImpl.switchMode((FollowerMode) self);
+      //    return 0;
+      // return term;
+
+
       int term = mConfig.getCurrentTerm ();
       int vote = term;
       return vote;
@@ -45,6 +58,14 @@ public class LeaderMode extends RaftMode {
 			    Entry[] entries,
 			    int leaderCommit) {
     synchronized (mLock) {
+
+      // Determine if requester has higher term, step down and vote for them if this is
+      // the case
+      // if (notRealLeader)
+      //    RaftModeImpl.switchMode((FollowerMode) self);
+      //    return 0;
+      // return term;
+
       int term = mConfig.getCurrentTerm ();
       int result = term;
       return result;
@@ -54,6 +75,8 @@ public class LeaderMode extends RaftMode {
   // @param id of the timer that timed out
   public void handleTimeout (int timerID) {
     synchronized (mLock) {
+      // Send heartbeat to candidates using an empty appendEntriesRPC
+      // Reset heartbeat timer
     }
   }
 }

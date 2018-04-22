@@ -1,5 +1,12 @@
 package edu.duke.raft;
 
+// notes:
+
+// Respond to RPCs from candidates and leaders
+// If election timeout elapses without receiving AppendEntries
+// RPC from current leader or granting vote to candidate:
+// convert to candidate
+
 public class FollowerMode extends RaftMode {
   public void go () {
     synchronized (mLock) {
