@@ -34,6 +34,8 @@ public class CandidateMode extends RaftMode {
       // electionCountTimer.start();
       // Declare election
       // electionStart(); // This will invoke the requestVoteRPC of all other servers
+
+      log(term, "switched to candidate mode.");
     }
   }
 
@@ -90,8 +92,6 @@ public class CandidateMode extends RaftMode {
     synchronized (mLock) {
       // Either: 1. Won election (become leader), 2. Lost election (become follower)
       // 3. Still waiting on vote (reset timeout)
-
-
       // if(won)
       //    RaftModeImpl.switchMode((LeaderMode) self);
       // elif(lost)
@@ -129,5 +129,9 @@ public class CandidateMode extends RaftMode {
     
     	
     }
+  }
+  
+  public void log(int term, String message) {
+      System.out.println ("S" + mID + "." + term + ": " + message);
   }
 }
