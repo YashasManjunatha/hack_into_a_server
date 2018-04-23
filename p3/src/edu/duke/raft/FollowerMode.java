@@ -8,17 +8,29 @@ package edu.duke.raft;
 // convert to candidate
 
 public class FollowerMode extends RaftMode {
+
+
+  // if the electionTimer times out, become a candidate
+  Timer electionTimer;
+  final int electionTimerID = 1;
+
   public void go () {
     synchronized (mLock) {
+      int term = mConfig.getCurrentTerm();
 
-      // start heartbeat timer 
-
-      int term = 0;
       System.out.println ("S" + 
 			  mID + 
 			  "." + 
 			  term + 
 			  ": switched to follower mode.");
+
+      // start heartbeat timer x
+      int electionTimeout; 
+      if ((electionTimeout = mConfig.getTimeoutOverride()) == -1) {
+        electionTimeout = ThreadLocalRandom.current().nextInt(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX);
+      }
+
+      electionTimer = scheduleTimer(electionTimeout, electionTimerID);
     }
   }
   
@@ -76,11 +88,11 @@ public class FollowerMode extends RaftMode {
 
   // @param id of the timer that timed out
   public void handleTimeout (int timerID) {
-
-    // If timer goes off, hold election
-    // RaftModeImpl.switchMode((CandidateMode) self);
-
     synchronized (mLock) {
+      if (timerID == electionTimerID) {
+        // If timer goes off, hold election
+        RaftModeImpl.setMode(new CandidateMode());
+      }
     }
   }
 }
