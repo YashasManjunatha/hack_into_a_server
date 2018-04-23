@@ -66,23 +66,13 @@ public class FollowerMode extends RaftMode {
 				log("voted for server: " + candidateID + "." + candidateTerm);
 				return 0; // Vote for server
 			} else {
+				log("didn't vote for server: " + candidateID + "." + candidateTerm);
 				mConfig.setCurrentTerm(mConfig.getCurrentTerm(), 0); //Do we vote for anyone? Do we vote for ourselves?
 				return mConfig.getCurrentTerm(); // No vote, return term
 			}
 		}
 	}
 	
-	/* 5.2
-	 * While waiting for votes, a candidate may receive an
-	 * AppendEntries RPC from another server claiming to be
-	 * leader. If the leader’s term (included in its RPC) is at least
-	 * as large as the candidate’s current term, then the candidate
-	 * recognizes the leader as legitimate and returns to follower
-	 * state. If the term in the RPC is smaller than the candidate’s
-	 * current term, then the candidate rejects the RPC and continues
-	 * in candidate state.
-	 */
-
 	/*
 	 * Receiver implementation:
 	 * 1. Reply false if term < currentTerm (§5.1)
@@ -101,7 +91,7 @@ public class FollowerMode extends RaftMode {
 	// @return 0, if server appended entries; otherwise, server's
 	// current term
 	public int appendEntries (int leaderTerm,
-			int leaderID,
+			int leaderID, // so follower can redirect clients?
 			int prevLogIndex,
 			int prevLogTerm,
 			Entry[] entries,
@@ -111,23 +101,30 @@ public class FollowerMode extends RaftMode {
 			int lowestCommonTerm = mLog.getEntry(lowestCommonIndex).term;
 			
 			if (leaderTerm >= mConfig.getCurrentTerm() && prevLogTerm == lowestCommonTerm && lowestCommonIndex == prevLogIndex) {
-				log("leader P"+leaderID+"."+leaderTerm+" seems legitimate");
-				electionTimer.cancel(); // reset timer
+				log("recognized P"+leaderID+"."+leaderTerm+" as leader.");
+				electionTimer.cancel();
 				electionTimer = scheduleTimer(electionTimeout, electionTimerID);
 				
+				// Repair Log
 				if (leaderTerm > mConfig.getCurrentTerm()) {
-					mConfig.setCurrentTerm(leaderTerm, leaderID); // Update to make sure ledger is correct. 
+					log("updating term to leader term");
+					mConfig.setCurrentTerm(leaderTerm, leaderID); //Update to make sure term is correct. 
+					log("updated term to leader term");
 				}
 				
-				if (entries.length != 0) {  // repair log
-					mLog.insert(entries, prevLogIndex, prevLogTerm);
+				if (entries.length != 0) { // check for heartbeat
+					if (mLog.insert(entries, prevLogIndex, prevLogTerm) == -1) {
+						log("insert operation failed!"); // break?
+					} else {
+						log("inserted entries");
+					}
 				}
 				
 				mCommitIndex = Math.min(leaderCommit, mLog.getLastIndex());
-				
+
 				return 0;
 			} else {
-				log("rejected AppendEntries");
+				log("rejected AppendEntries.");
 				return mConfig.getCurrentTerm();
 			}
 		}
@@ -137,6 +134,7 @@ public class FollowerMode extends RaftMode {
 	public void handleTimeout (int timerID) {
 		synchronized (mLock) {
 			if (timerID == electionTimerID) {
+				log("times up! became candidate");
 				electionTimer.cancel(); // If timer goes off, become a candidate
 				RaftServerImpl.setMode(new CandidateMode());
 			}
