@@ -93,6 +93,8 @@ public class CandidateMode extends RaftMode {
 		synchronized (mLock) {
 			if (timerID == electionTimerID) {
 				log("handling timeout");
+				electionCountTimer.cancel();
+				
 				int[] votes = new int[mConfig.getNumServers()];
 				for (int i : RaftResponses.getVotes(mConfig.getCurrentTerm())) {
 					votes[i]++;
@@ -113,7 +115,6 @@ public class CandidateMode extends RaftMode {
 					log("lost election");
 					RaftServerImpl.setMode(new FollowerMode());
 				} else { // 3. Still waiting on vote (reset timeout) // new election?
-					electionCountTimer.cancel();
 					electionStart();
 				}
 			}
