@@ -4,38 +4,41 @@ import java.util.Timer;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class CandidateMode extends RaftMode {
+	
 	Timer electionCountTimer;
+	int electionTimeout;
 	final int electionTimerID = 2;
 	
   public void go () {
     synchronized (mLock) {
-    	int term = mConfig.getCurrentTerm();
-    	term ++; // Increment term to indicate start of new election
-    	System.out.println ("S" + 
-  			  mID + 
-  			  "." + 
-  			  term + 
-  			  ": switched to candidate mode.");
+    	log("switched to candidate mode.");
+    	int term = mConfig.getCurrentTerm() + 1; // Increment term to indicate start of new election
     	mConfig.setCurrentTerm(term, mID);
     	
-    	int electionTimeout; 
         if ((electionTimeout = mConfig.getTimeoutOverride()) == -1) {
           electionTimeout = ThreadLocalRandom.current().nextInt(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX);
         }
 
         electionCountTimer = scheduleTimer(electionTimeout, electionTimerID);
-    	
+        
+        RaftResponses.setTerm(term);
+        RaftResponses.clearVotes(term);
         for (int i = 0; i < mConfig.getNumServers(); i++) {
         	if (i != mID) {
         		this.remoteRequestVote(i, mConfig.getCurrentTerm(), mID, mLog.getLastIndex(), mLog.getLastTerm());
         	}
         }
         
+        // if absolute majority of votes, transition to leader.
+        //If AppendEntries RPC received from new leader: convert to
+       // follower
+        // If election timeout elapses: start new election
+        
+        
       // electionCountTimer.start();
       // Declare election
       // electionStart(); // This will invoke the requestVoteRPC of all other servers
 
-      log(term, "switched to candidate mode.");
     }
   }
 
@@ -98,40 +101,40 @@ public class CandidateMode extends RaftMode {
       //  RaftModeImpl.switchMode((FollowerMode) self);
       //else
       //    electionCountTimer.reset();
+    	if (timerID == electionTimerID) {
+        	double[] votes = new double[mConfig.getNumServers()]; // why double? 
+        	for (double v : votes) {
+        		v = 0;
+        	}
+        	for (int i : RaftResponses.getVotes(mConfig.getCurrentTerm())) {
+        		votes[i]++;
+        	}
+        	boolean lost = false;
+        	for (int id = 0; id < votes.length; id++) {
+        		if (id != mID && votes[id] > ((double) mConfig.getNumServers())/2) {
+        			lost = true;
+        		}
+        	}
+        		
+        	if (votes[mID] > ((double) mConfig.getNumServers())/2) {
+        		RaftServerImpl.setMode(new LeaderMode());
+        	} else if (lost) {
+        		RaftServerImpl.setMode(new FollowerMode());
+        	} else {
+        		electionCountTimer.cancel();
+        		int electionTimeout; 
+                if ((electionTimeout = mConfig.getTimeoutOverride()) == -1) {
+                  electionTimeout = ThreadLocalRandom.current().nextInt(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX);
+                }
 
-    	double[] votes = new double[mConfig.getNumServers()];
-    	for (double v : votes) {
-    		v = 0;
+                electionCountTimer = scheduleTimer(electionTimeout, electionTimerID);
+        	}
     	}
-    	for (int i : RaftResponses.getVotes(mConfig.getCurrentTerm())) {
-    		votes[i]++;
-    	}
-    	boolean lost = false;
-    	for (int id = 0; id < votes.length; id++) {
-    		if (id != mID && votes[id] > ((double) mConfig.getNumServers())/2) {
-    			lost = true;
-    		}
-    	}
-    		
-    	if (votes[mID] > ((double) mConfig.getNumServers())/2) {
-    		RaftServerImpl.setMode(new LeaderMode());
-    	} else if (lost) {
-    		RaftServerImpl.setMode(new FollowerMode());
-    	} else {
-    		electionCountTimer.cancel();
-    		int electionTimeout; 
-            if ((electionTimeout = mConfig.getTimeoutOverride()) == -1) {
-              electionTimeout = ThreadLocalRandom.current().nextInt(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX);
-            }
-
-            electionCountTimer = scheduleTimer(electionTimeout, electionTimerID);
-    	}
-    
-    	
     }
   }
   
-  public void log(int term, String message) {
-      System.out.println ("S" + mID + "." + term + ": " + message);
-  }
+public void log(String message) {
+		int currentTerm = mConfig.getCurrentTerm();
+		System.out.println("S" + mID + "." + currentTerm + ": " + message);
+}
 }
