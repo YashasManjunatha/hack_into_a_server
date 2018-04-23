@@ -61,7 +61,7 @@ public class FollowerMode extends RaftMode {
 			boolean haventVoted = (mConfig.getVotedFor() == candidateID || mConfig.getVotedFor() == 0);
 			boolean candidateLogUpToDate = (lastLogTerm == mLog.getLastTerm()) ? lastLogIndex >= mLog.getLastIndex() : lastLogTerm > mLog.getLastTerm();
 			
-			if (!candidateOutdatedTerm || haventVoted || candidateLogUpToDate) {
+			if (!candidateOutdatedTerm && haventVoted && candidateLogUpToDate) {
 				mConfig.setCurrentTerm(candidateTerm, candidateID);
 				log("voted for server: " + candidateID + "." + candidateTerm);
 				return 0; // Vote for server

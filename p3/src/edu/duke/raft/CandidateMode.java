@@ -49,13 +49,11 @@ public class CandidateMode extends RaftMode {
 			int lastLogIndex,
 			int lastLogTerm) {
 		synchronized (mLock) {
-
-			if (candidateTerm > mConfig.getCurrentTerm ()) {
-				// vote for the candidate! become a follower.
-				// decide whether or not to vote, and do so.
-				
-				return 0;
-				
+			if (candidateTerm > mConfig.getCurrentTerm()) { // become a follower.
+				electionCountTimer.cancel();
+				mConfig.setCurrentTerm(candidateTerm, candidateID);
+				RaftServerImpl.setMode(new FollowerMode()); 
+				return mConfig.getCurrentTerm();
 			} else {
 				// more stuff?
 				return mConfig.getCurrentTerm();
