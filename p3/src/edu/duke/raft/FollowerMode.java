@@ -1,5 +1,8 @@
 package edu.duke.raft;
 
+import java.util.Timer;
+import java.util.concurrent.ThreadLocalRandom;
+
 // notes:
 
 // Respond to RPCs from candidates and leaders
@@ -91,7 +94,7 @@ public class FollowerMode extends RaftMode {
     synchronized (mLock) {
       if (timerID == electionTimerID) {
         // If timer goes off, hold election
-        RaftModeImpl.setMode(new CandidateMode());
+        RaftServerImpl.setMode(new CandidateMode());
       }
     }
   }
