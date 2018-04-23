@@ -20,25 +20,31 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 
 public class FollowerMode extends RaftMode {
-	
-	Timer electionTimer; // if the electionTimer times out, become a candidate
+	Timer electionTimer;
+	int electionTimeout;
 	final int electionTimerID = 1;
 
 	public void go () {
 		synchronized (mLock) {
-			int currentTerm = mConfig.getCurrentTerm();
+			log("switched to follower mode.");
 			
-			log(currentTerm, "switched to follower mode.");
-			
-			// start timer
-			int electionTimeout; 
 			if ((electionTimeout = mConfig.getTimeoutOverride()) == -1) {
 				electionTimeout = ThreadLocalRandom.current().nextInt(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX);
 			}
-
 			electionTimer = scheduleTimer(electionTimeout, electionTimerID);
 		}
 	}
+	
+	/* Reply false if term < currentTerm (§5.1)
+	 * If votedFor is null or candidateId, and candidate’s log is at least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
+	 * 
+	 * Raft determines which of two logs is more up-to-date
+	 * by comparing the index and term of the last entries in the
+	 * logs. If the logs have last entries with different terms, then
+	 * the log with the later term is more up-to-date. If the logs
+	 * end with the same term, then whichever log is longer is
+	 * more up-to-date. 
+	 */
 
 	// @param candidate’s term
 	// @param candidate requesting vote
@@ -51,29 +57,17 @@ public class FollowerMode extends RaftMode {
 			int lastLogIndex,
 			int lastLogTerm) {
 		synchronized (mLock) {
-			int currentTerm = mConfig.getCurrentTerm ();
-			
-			/* Reply false if term < currentTerm (§5.1)
-			 * If votedFor is null or candidateId, and candidate’s log is at least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
-			 * 
-			 * Raft determines which of two logs is more up-to-date
-			 * by comparing the index and term of the last entries in the
-			 * logs. If the logs have last entries with different terms, then
-			 * the log with the later term is more up-to-date. If the logs
-			 * end with the same term, then whichever log is longer is
-			 * more up-to-date. 
-			 */
-			
-			boolean candidateOutdatedTerm = candidateTerm < currentTerm;
+			boolean candidateOutdatedTerm = candidateTerm < mConfig.getCurrentTerm();
 			boolean haventVoted = (mConfig.getVotedFor() == candidateID || mConfig.getVotedFor() == 0);
-			boolean candidateLogUpToDate = (lastLogTerm == mLog.getLastTerm()) ? lastLogIndex > mLog.getLastIndex() : lastLogTerm > mLog.getLastTerm();
+			boolean candidateLogUpToDate = (lastLogTerm == mLog.getLastTerm()) ? lastLogIndex >= mLog.getLastIndex() : lastLogTerm > mLog.getLastTerm();
 			
 			if (!candidateOutdatedTerm || haventVoted || candidateLogUpToDate) {
 				mConfig.setCurrentTerm(candidateTerm, candidateID);
-				return 0; // Vote for server, return 0
+				log("voted for server: " + candidateID + "." + candidateTerm);
+				return 0; // Vote for server
 			} else {
-				//mConfig.setCurrentTerm(currentTerm, 0);
-				return currentTerm; // No vote, return term
+				mConfig.setCurrentTerm(mConfig.getCurrentTerm(), 0); //Do we vote for anyone? Do we vote for ourselves?
+				return mConfig.getCurrentTerm(); // No vote, return term
 			}
 		}
 	}
@@ -89,14 +83,13 @@ public class FollowerMode extends RaftMode {
 	 * in candidate state.
 	 */
 
-	
 	/*
 	 * Receiver implementation:
 	 * 1. Reply false if term < currentTerm (§5.1)
  	 * 2. Reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm (§5.3)
      * 3. If an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it (§5.3)
 	 * 4. Append any new entries not already in the log
-	 * 5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
+	 * 5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry) !!!!
 	 */
 	
 	// @param leader’s term
@@ -114,20 +107,29 @@ public class FollowerMode extends RaftMode {
 			Entry[] entries,
 			int leaderCommit) {
 		synchronized (mLock) {
+			int lowestCommonIndex = Math.max(0, Math.min(prevLogIndex, mLog.getLastIndex()));
+			int lowestCommonTerm = mLog.getEntry(lowestCommonIndex).term;
 			
-			
-			boolean legitimateLeader = leaderTerm >= mConfig.getCurrentTerm();
-
-			if (legitimateLeader) {
-				// reset timer, attempt to repair log.
+			if (leaderTerm >= mConfig.getCurrentTerm() && prevLogTerm == lowestCommonTerm && lowestCommonIndex == prevLogIndex) {
+				log("leader P"+leaderID+"."+leaderTerm+" seems legitimate");
+				electionTimer.cancel(); // reset timer
+				electionTimer = scheduleTimer(electionTimeout, electionTimerID);
+				
+				if (leaderTerm > mConfig.getCurrentTerm()) {
+					mConfig.setCurrentTerm(leaderTerm, leaderID); // Update to make sure ledger is correct. 
+				}
+				
+				if (entries.length != 0) {  // repair log
+					mLog.insert(entries, prevLogIndex, prevLogTerm);
+				}
+				
+				mCommitIndex = Math.min(leaderCommit, mLog.getLastIndex());
+				
+				return 0;
 			} else {
-				// reject RPC.
+				log("rejected AppendEntries");
+				return mConfig.getCurrentTerm();
 			}
-			
-			// 1. Check if appendEntriesRPC came from leader
-			// 2. If so, reset timer, and attempt to repair log
-
-			return 0;
 		}
 	}  
 
@@ -135,15 +137,15 @@ public class FollowerMode extends RaftMode {
 	public void handleTimeout (int timerID) {
 		synchronized (mLock) {
 			if (timerID == electionTimerID) {
-				// If timer goes off, hold election
-				electionTimer.cancel();
+				electionTimer.cancel(); // If timer goes off, become a candidate
 				RaftServerImpl.setMode(new CandidateMode());
 			}
 		}
 	}
 
-	public void log(int term, String message) {
-		System.out.println ("S" + mID + "." + term + ": " + message);
+	public void log(String message) {
+		int currentTerm = mConfig.getCurrentTerm();
+		System.out.println("S" + mID + "." + currentTerm + ": " + message);
 	}
 }
 
