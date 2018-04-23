@@ -50,13 +50,16 @@ public class CandidateMode extends RaftMode {
 			int lastLogTerm) {
 		synchronized (mLock) {
 
-			// If in CandidateMode, already voted for self so return term
-			// likely a bit more sophisticated than this. 
-			// return self.term
-
-			int term = mConfig.getCurrentTerm ();
-			int result = term;
-			return result;
+			if (candidateTerm > mConfig.getCurrentTerm ()) {
+				// vote for the candidate! become a follower.
+				// decide whether or not to vote, and do so.
+				
+				return 0;
+				
+			} else {
+				// more stuff?
+				return mConfig.getCurrentTerm();
+			}
 		}
 	}
 
@@ -76,13 +79,14 @@ public class CandidateMode extends RaftMode {
 			Entry[] entries,
 			int leaderCommit) {
 		synchronized (mLock) {
-
-			// Two cases: 1. Stale leader, 2. Stale candidate
-
-
-			int term = mConfig.getCurrentTerm ();
-			int result = term;
-			return result;
+			if (leaderTerm >= mConfig.getCurrentTerm()) { // candidate is stale
+				electionCountTimer.cancel();
+				mConfig.setCurrentTerm(leaderTerm, leaderID);
+				RaftServerImpl.setMode(new FollowerMode()); // cancel election, become a follower. 
+				return mConfig.getCurrentTerm(); // we didn't append any entries, this is lower than leaders so shouldn't cause issues.
+			} else {
+				return mConfig.getCurrentTerm(); // leader is stale
+			}
 		}
 	}
 
@@ -99,7 +103,7 @@ public class CandidateMode extends RaftMode {
 				boolean lostElection = false;
 				for (int id = 0; id < votes.length; id++) {
 					if (id != mID && votes[mID] > Math.ceil(mConfig.getNumServers()/2.0)) {
-						log(" another leader won! P"+mID+":"+mConfig.getCurrentTerm());
+						log("another leader won! P"+mID+":"+mConfig.getCurrentTerm());
 						lostElection = true;
 					}
 				}
