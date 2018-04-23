@@ -9,6 +9,7 @@ import java.util.concurrent.ThreadLocalRandom;
 // RPC from current leader or granting vote to candidate:
 // convert to candidate
 
+
 /* 5.2
  * A server remains in follower state as long as it receives valid
  * RPCs from a leader or candidate. Leaders send periodic

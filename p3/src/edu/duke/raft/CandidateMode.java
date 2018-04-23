@@ -1,16 +1,40 @@
 package edu.duke.raft;
 
+import java.util.Timer;
+import java.util.concurrent.ThreadLocalRandom;
+
 public class CandidateMode extends RaftMode {
+	Timer electionCountTimer;
+	final int electionTimerID = 2;
+	
   public void go () {
     synchronized (mLock) {
+    	int term = mConfig.getCurrentTerm();
+    	term ++; // Increment term to indicate start of new election
+    	System.out.println ("S" + 
+  			  mID + 
+  			  "." + 
+  			  term + 
+  			  ": switched to candidate mode.");
+    	mConfig.setCurrentTerm(term, mID);
+    	
+    	int electionTimeout; 
+        if ((electionTimeout = mConfig.getTimeoutOverride()) == -1) {
+          electionTimeout = ThreadLocalRandom.current().nextInt(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX);
+        }
 
-      // self.term++; // Increment term to indicate start of new election
+        electionCountTimer = scheduleTimer(electionTimeout, electionTimerID);
+    	
+        for (int i = 0; i < mConfig.getNumServers(); i++) {
+        	if (i != mID) {
+        		this.remoteRequestVote(i, mConfig.getCurrentTerm(), mID, mLog.getLastIndex(), mLog.getLastTerm());
+        	}
+        }
+        
       // electionCountTimer.start();
       // Declare election
       // electionStart(); // This will invoke the requestVoteRPC of all other servers
 
-
-      int term = 0;
       log(term, "switched to candidate mode.");
     }
   }
@@ -66,7 +90,6 @@ public class CandidateMode extends RaftMode {
   // @param id of the timer that timed out
   public void handleTimeout (int timerID) {
     synchronized (mLock) {
-
       // Either: 1. Won election (become leader), 2. Lost election (become follower)
       // 3. Still waiting on vote (reset timeout)
       // if(won)
@@ -76,7 +99,35 @@ public class CandidateMode extends RaftMode {
       //else
       //    electionCountTimer.reset();
 
+    	double[] votes = new double[mConfig.getNumServers()];
+    	for (double v : votes) {
+    		v = 0;
+    	}
+    	for (int i : RaftResponses.getVotes(mConfig.getCurrentTerm())) {
+    		votes[i]++;
+    	}
+    	boolean lost = false;
+    	for (int id = 0; id < votes.length; id++) {
+    		if (id != mID && votes[id] > ((double) mConfig.getNumServers())/2) {
+    			lost = true;
+    		}
+    	}
+    		
+    	if (votes[mID] > ((double) mConfig.getNumServers())/2) {
+    		RaftServerImpl.setMode(new LeaderMode());
+    	} else if (lost) {
+    		RaftServerImpl.setMode(new FollowerMode());
+    	} else {
+    		electionCountTimer.cancel();
+    		int electionTimeout; 
+            if ((electionTimeout = mConfig.getTimeoutOverride()) == -1) {
+              electionTimeout = ThreadLocalRandom.current().nextInt(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX);
+            }
 
+            electionCountTimer = scheduleTimer(electionTimeout, electionTimerID);
+    	}
+    
+    	
     }
   }
   
