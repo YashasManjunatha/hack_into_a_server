@@ -1,6 +1,14 @@
 package edu.duke.raft;
 
 public class LeaderMode extends RaftMode {
+	
+	/*
+	 Once a candidate wins an election, it
+	 becomes leader. It then sends heart beat messages to all of
+	 the other servers to establish its authority and prevent new
+	 elections.
+	 */
+	
   public void go () {
     synchronized (mLock) {
 
@@ -8,11 +16,7 @@ public class LeaderMode extends RaftMode {
       // logReplication(); // Will call appendEntriesRPC of all servers
 
       int term = 0;
-      System.out.println ("S" + 
-			  mID + 
-			  "." + 
-			  term + 
-			  ": switched to leader mode.");
+      log(term, "switched to leader mode.");
     }
   }
   
@@ -34,6 +38,8 @@ public class LeaderMode extends RaftMode {
       //    RaftModeImpl.switchMode((FollowerMode) self);
       //    return 0;
       // return term;
+    	
+    	
 
 
       int term = mConfig.getCurrentTerm ();
@@ -78,5 +84,9 @@ public class LeaderMode extends RaftMode {
       // Send heartbeat to candidates using an empty appendEntriesRPC
       // Reset heartbeat timer
     }
+  }
+  
+  public void log(int term, String message) {
+      System.out.println ("S" + mID + "." + term + ": " + message);
   }
 }
