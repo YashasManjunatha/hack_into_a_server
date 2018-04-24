@@ -1,5 +1,6 @@
 package edu.duke.raft;
 
+import java.util.Arrays;
 import java.util.Timer;
 
 public class LeaderMode extends RaftMode {
@@ -36,13 +37,56 @@ public class LeaderMode extends RaftMode {
 			heartbeatTimeout = HEARTBEAT_INTERVAL;
 			heartbeatTimer = scheduleTimer(heartbeatTimeout, heartbeatTimerID);
 
+			// To bring a followers log into consistency with its own, the leader
+			// must find the latest log entry where the two logs agree, delete any entries in the followers
+			// log after that point, and send the follower all of the leaders entries after that point.
+			
+			// The leader maintains a nextIndex for each follower,
+			// which is the index of the next log entry the leader will send to the follower.
+			// When a leader first comes into power, it initializes all nextIndex values to the index 
+			// just after the last one in its log. If a followers log is inconsistent w/ the leaders, Append Entries
+			// will fail. After a rejection, the leader decrements nextIndex and retries. Eventually, they will match.
+			
 			// replicate the log
 			RaftResponses.setTerm(mConfig.getCurrentTerm());
 			RaftResponses.clearAppendResponses(mConfig.getCurrentTerm());
 			// The goal is to replicate the log prefix on every server.
-			for (int id = 0; id < mConfig.getNumServers(); id++) {
+			int[] nextIndices = new int[mConfig.getNumServers()+1]; // non-zero indexed.
+			Arrays.fill(nextIndices, mLog.getLastIndex()+1);
+			for (int id = 1; id < mConfig.getNumServers(); id++) {
+				if (id == mID) {
+					continue;
+				}
 				
-				// remoteAppendEntries
+				int nextIndex = nextIndices[id];
+				for (int testIndex = nextIndex; testIndex >= 0; testIndex--) {
+					// build list of entries beyond this point to use in RPC
+					Entry[] entriesBeyondIndex = new Entry[mLog.getLastIndex()-testIndex]; // for now
+					
+					for( int i = 0; i < entriesBeyondIndex.length; i++ ) {
+						entriesBeyondIndex[i] = mLog.getEntry(i+testIndex);
+					}
+					RaftResponses.clearAppendResponses(mConfig.getCurrentTerm());
+					this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,testIndex,
+							mLog.getEntry(testIndex).term,entriesBeyondIndex, mCommitIndex);
+					
+					int[] appendResponses = RaftResponses.getAppendResponses(mConfig.getCurrentTerm());
+					while (appendResponses.length == 0) {
+						// spin
+						appendResponses = RaftResponses.getAppendResponses(mConfig.getCurrentTerm());
+					}
+					
+					// when index is common, it should return 0, otherwise that server's current term.
+					int returnVal = appendResponses[0];
+					
+					if (returnVal == 0) {
+						// we've found a common index! it's brought into consistency.
+						break;
+					} else {
+						// keep going
+						// do something w/ ret val?
+					}					
+				}
 			}
 		}
 	}
