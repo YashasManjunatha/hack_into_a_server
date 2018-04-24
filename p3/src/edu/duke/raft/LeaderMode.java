@@ -1,57 +1,14 @@
 package edu.duke.raft;
 
-import java.util.Timer;
-
 public class LeaderMode extends RaftMode {
-
-
-	Timer heartbeatTimer;
-	int heartbeatTimeout;
-	final int heartbeatTimerID = 3;
-
-	/*
-	 Once a candidate wins an election, it
-	 becomes leader. It then sends heart beat messages to all of
-	 the other servers to establish its authority and prevent new
-	 elections.
-	 */
-	
-	/*
-	 * If command received from client: append entry to local log,
-	 * respond after entry applied to state machine
-	 * 
-	 * If last log index ≥ nextIndex for a follower: send
-	 * AppendEntries RPC with log entries starting at nextIndex
-	 * If successful: update nextIndex and matchIndex for follower (§5.3)
-	 * If AppendEntries fails because of log inconsistency: decrement nextIndex and retry (§5.3)
-	 * If there exists an N such that N > commitIndex, a majority of matchIndex[i] ≥ N, and log[N].term == currentTerm: set commitIndex = N (§5.3, §5.4).
-	 * aka entries up to N are all committed
-	 */
-
 	public void go () {
 		synchronized (mLock) {
-			log("switched to leader mode.");
-			
-			// initial empty heart beat.
-			for (int i = 0; i < mConfig.getNumServers(); i++) {
-				if (i != mID) {
-					this.remoteAppendEntries(i, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mLog.getLastIndex());
-				}
-			}
-			
-			heartbeatTimeout = HEARTBEAT_INTERVAL;
-			heartbeatTimer = scheduleTimer(heartbeatTimeout, heartbeatTimerID);
-
-			logReplication(); // Will call appendEntriesRPC of all servers
-		}
-	}
-
-	public void logReplication() {
-		for (int i = 0; i < mConfig.getNumServers(); i++) {
-			if (i != mID) {
-				// ENTRIES? 
-				this.remoteAppendEntries(i, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mLog.getLastIndex());
-			}
+			int term = 0;
+			System.out.println ("S" + 
+					mID + 
+					"." + 
+					term + 
+					": switched to leader mode.");
 		}
 	}
 
@@ -66,22 +23,9 @@ public class LeaderMode extends RaftMode {
 			int lastLogIndex,
 			int lastLogTerm) {
 		synchronized (mLock) {
-
-			// Determine if requester has larger term, step down if this is the case and
-			// vote for them
-			// if (notRealLeader)
-			//    RaftModeImpl.switchMode((FollowerMode) self);
-			//    return 0;
-			// return term;
-
-			if (candidateTerm > mConfig.getCurrentTerm()) {
-				heartbeatTimer.cancel();
-				mConfig.setCurrentTerm(candidateTerm, candidateID);
-				RaftServerImpl.setMode(new FollowerMode());
-				return 0;
-			} else {
-				return mConfig.getCurrentTerm();
-			}
+			int term = mConfig.getCurrentTerm ();
+			int vote = term;
+			return vote;
 		}
 	}
 
@@ -101,44 +45,15 @@ public class LeaderMode extends RaftMode {
 			Entry[] entries,
 			int leaderCommit) {
 		synchronized (mLock) {
-
-			if (leaderTerm > mConfig.getCurrentTerm()) {
-				heartbeatTimer.cancel();
-				RaftServerImpl.setMode(new FollowerMode());
-				return 0;
-			} else {
-				return mConfig.getCurrentTerm();
-			}
-
-			// Determine if requester has higher term, step down and vote for them if this is
-			// the case
-			// if (notRealLeader)
-			//    RaftModeImpl.switchMode((FollowerMode) self);
-			//    return 0;
-			// return term;
+			int term = mConfig.getCurrentTerm ();
+			int result = term;
+			return result;
 		}
 	}
 
 	// @param id of the timer that timed out
 	public void handleTimeout (int timerID) {
 		synchronized (mLock) {
-			if (timerID == heartbeatTimerID) {
-				heartbeatTimer.cancel(); // Reset heartbeat timer
-
-				// Send heartbeat to candidates using an empty appendEntriesRPC
-				for (int i = 0; i < mConfig.getNumServers(); i++) {
-					if (i != mID) {
-						this.remoteAppendEntries(i, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mLog.getLastIndex());
-					}
-				}
-
-				heartbeatTimer = scheduleTimer(heartbeatTimeout,heartbeatTimerID);
-			}
 		}
-	}
-	
-	public void log(String message) {
-		int currentTerm = mConfig.getCurrentTerm();
-		System.out.println("S" + mID + "." + currentTerm + ": " + message);
 	}
 }
