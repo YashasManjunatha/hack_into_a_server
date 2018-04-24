@@ -36,7 +36,7 @@ public class FollowerMode extends RaftMode {
 			int lastLogIndex,
 			int lastLogTerm) {
 		synchronized (mLock) {
-			//electionTimer.cancel();
+			electionTimer.cancel();
 			
 			log("Vote Request from Server: " + candidateID + "." + candidateTerm);
 
@@ -46,13 +46,13 @@ public class FollowerMode extends RaftMode {
 			boolean haventVoted = (mConfig.getVotedFor() == 0 || mConfig.getVotedFor() == candidateID);
 			boolean candidateLogUpToDate = (lastLogTerm == mLog.getLastTerm()) ? lastLogIndex > mLog.getLastIndex() : lastLogTerm > mLog.getLastTerm();
 			
-//			int electionTimeout; 
-//			if ((electionTimeout = mConfig.getTimeoutOverride()) == -1) {
-//				electionTimeout = ThreadLocalRandom.current().nextInt(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX);
-//			}
-//
-//			electionTimer = scheduleTimer(electionTimeout, electionTimerID);
-//			
+			int electionTimeout; 
+			if ((electionTimeout = mConfig.getTimeoutOverride()) == -1) {
+				electionTimeout = ThreadLocalRandom.current().nextInt(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX);
+			}
+
+			electionTimer = scheduleTimer(electionTimeout, electionTimerID);
+			
 			if(candidateOutdatedTerm) {
 				log("Didn't vote for Server: " + candidateID + "." + candidateTerm);
 				mConfig.setCurrentTerm(currentTerm, 0);
@@ -94,6 +94,7 @@ public class FollowerMode extends RaftMode {
 	public void handleTimeout (int timerID) {
 		synchronized (mLock) {
 			if (timerID == electionTimerID) {
+				electionTimer.cancel();
 				RaftServerImpl.setMode(new CandidateMode());
 			}
 

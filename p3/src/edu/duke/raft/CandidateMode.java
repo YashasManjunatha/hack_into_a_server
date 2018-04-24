@@ -112,6 +112,7 @@ public class CandidateMode extends RaftMode {
 	public void handleTimeout (int timerID) {
 		synchronized (mLock) {
 			if (timerID == electionTimerID) {
+				electionTimer.cancel();
 				//int[] responseVotes = RaftResponses.getVotes(mConfig.getCurrentTerm());
 				double voteCount = 0;
 				for (int v : RaftResponses.getVotes(mConfig.getCurrentTerm())) {
