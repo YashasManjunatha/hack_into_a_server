@@ -37,11 +37,7 @@ public class CandidateMode extends RaftMode {
 	private void electionStart() {
 		int term = mConfig.getCurrentTerm();     
 		term++;
-		System.out.println ("S" + 
-				mID + 
-				"." + 
-				term + 
-				": starting new election.");
+		log("starting new election.");
 
 		mConfig.setCurrentTerm(term, mID);
 		RaftResponses.clearVotes(term);

@@ -103,6 +103,7 @@ public class FollowerMode extends RaftMode {
 			int lowestCommonIndex = Math.max(0, Math.min(prevLogIndex, mLog.getLastIndex()));
 			int lowestCommonTerm = mLog.getEntry(lowestCommonIndex).term;
 			
+			// investigate
 			if (leaderTerm >= mConfig.getCurrentTerm() && prevLogTerm == lowestCommonTerm && lowestCommonIndex == prevLogIndex) {
 				log("recognized P"+leaderID+"."+leaderTerm+" as leader.");
 				electionTimer.cancel();

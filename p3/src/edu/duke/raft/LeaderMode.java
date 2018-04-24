@@ -32,12 +32,12 @@ public class LeaderMode extends RaftMode {
 		synchronized (mLock) {
 			log("switched to leader mode.");
 			
-			// initial empty heart beat.
-			log("sending heartbeat");
+			// initial empty heart beat.	
 			RaftResponses.setTerm(mConfig.getCurrentTerm());
 			RaftResponses.clearAppendResponses(mConfig.getCurrentTerm());
 			for (int id = 1; id <= mConfig.getNumServers(); id++) {
 				if (id != mID) {
+					log("sending heartbeat to P"+id);
 					this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mCommitIndex);
 				}
 			}
@@ -50,12 +50,12 @@ public class LeaderMode extends RaftMode {
 	}
 
 	public void logReplication() {
-		log("sending heartbeat");
 		RaftResponses.setTerm(mConfig.getCurrentTerm());
 		RaftResponses.clearAppendResponses(mConfig.getCurrentTerm());
 		for (int id = 1; id <= mConfig.getNumServers(); id++) {
 			if (id != mID) {
 				// ENTRIES? 
+				log("sending heartbeat to P"+id);
 				this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0],  mCommitIndex);
 			}
 		}
@@ -123,18 +123,18 @@ public class LeaderMode extends RaftMode {
 			//    return 0;
 			// return term;
 		}
+		
 	}
 
 	// @param id of the timer that timed out
 	public void handleTimeout (int timerID) {
 		synchronized (mLock) {
 			if (timerID == heartbeatTimerID) {
-				
-				log("sending heartbeat");
 				RaftResponses.setTerm(mConfig.getCurrentTerm());
 				RaftResponses.clearAppendResponses(mConfig.getCurrentTerm());
 				for (int id = 1; id < mConfig.getNumServers(); id++) {
 					if (id != mID) { // Send heartbeat to other servers using an empty appendEntriesRPC
+						log("sending heartbeat to P"+id);
 						this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mCommitIndex);
 					}
 				}
