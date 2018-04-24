@@ -34,9 +34,11 @@ public class LeaderMode extends RaftMode {
 			
 			// initial empty heart beat.
 			log("sending heartbeat");
+			RaftResponses.setTerm(mConfig.getCurrentTerm());
+			RaftResponses.clearAppendResponses(mConfig.getCurrentTerm());
 			for (int id = 1; id <= mConfig.getNumServers(); id++) {
 				if (id != mID) {
-					this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mLog.getLastIndex());
+					this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mCommitIndex);
 				}
 			}
 			
@@ -49,10 +51,12 @@ public class LeaderMode extends RaftMode {
 
 	public void logReplication() {
 		log("sending heartbeat");
+		RaftResponses.setTerm(mConfig.getCurrentTerm());
+		RaftResponses.clearAppendResponses(mConfig.getCurrentTerm());
 		for (int id = 1; id <= mConfig.getNumServers(); id++) {
 			if (id != mID) {
 				// ENTRIES? 
-				this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mLog.getLastIndex());
+				this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0],  mCommitIndex);
 			}
 		}
 	}
@@ -125,6 +129,10 @@ public class LeaderMode extends RaftMode {
 	public void handleTimeout (int timerID) {
 		synchronized (mLock) {
 			if (timerID == heartbeatTimerID) {
+				
+				log("sending heartbeat");
+				RaftResponses.setTerm(mConfig.getCurrentTerm());
+				RaftResponses.clearAppendResponses(mConfig.getCurrentTerm());
 				for (int id = 1; id < mConfig.getNumServers(); id++) {
 					if (id != mID) { // Send heartbeat to other servers using an empty appendEntriesRPC
 						this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mCommitIndex);
