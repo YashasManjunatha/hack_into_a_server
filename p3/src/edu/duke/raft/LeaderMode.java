@@ -33,9 +33,10 @@ public class LeaderMode extends RaftMode {
 			log("switched to leader mode.");
 			
 			// initial empty heart beat.
-			for (int i = 0; i < mConfig.getNumServers(); i++) {
-				if (i != mID) {
-					this.remoteAppendEntries(i, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mLog.getLastIndex());
+			log("sending heartbeat");
+			for (int id = 1; id <= mConfig.getNumServers(); id++) {
+				if (id != mID) {
+					this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mLog.getLastIndex());
 				}
 			}
 			
@@ -47,10 +48,11 @@ public class LeaderMode extends RaftMode {
 	}
 
 	public void logReplication() {
-		for (int i = 0; i < mConfig.getNumServers(); i++) {
-			if (i != mID) {
+		log("sending heartbeat");
+		for (int id = 1; id <= mConfig.getNumServers(); id++) {
+			if (id != mID) {
 				// ENTRIES? 
-				this.remoteAppendEntries(i, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mLog.getLastIndex());
+				this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mLog.getLastIndex());
 			}
 		}
 	}
@@ -123,15 +125,13 @@ public class LeaderMode extends RaftMode {
 	public void handleTimeout (int timerID) {
 		synchronized (mLock) {
 			if (timerID == heartbeatTimerID) {
-				heartbeatTimer.cancel(); // Reset heartbeat timer
-
-				// Send heartbeat to candidates using an empty appendEntriesRPC
-				for (int i = 0; i < mConfig.getNumServers(); i++) {
-					if (i != mID) {
-						this.remoteAppendEntries(i, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mLog.getLastIndex());
+				for (int id = 1; id < mConfig.getNumServers(); id++) {
+					if (id != mID) { // Send heartbeat to other servers using an empty appendEntriesRPC
+						this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mCommitIndex);
 					}
 				}
 
+				heartbeatTimer.cancel(); // Reset heartbeat timer
 				heartbeatTimer = scheduleTimer(heartbeatTimeout,heartbeatTimerID);
 			}
 		}
@@ -139,6 +139,6 @@ public class LeaderMode extends RaftMode {
 	
 	public void log(String message) {
 		int currentTerm = mConfig.getCurrentTerm();
-		System.out.println("S" + mID + "." + currentTerm + ": " + message);
+		System.out.println("S" + mID + "." + currentTerm + " (leader): " + message);
 	}
 }

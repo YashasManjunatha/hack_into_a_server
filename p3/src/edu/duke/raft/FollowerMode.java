@@ -57,6 +57,8 @@ public class FollowerMode extends RaftMode {
 			int lastLogIndex,
 			int lastLogTerm) {
 		synchronized (mLock) {
+			log("vote request from server: " + candidateID + "." + candidateTerm);
+			
 			boolean candidateOutdatedTerm = candidateTerm < mConfig.getCurrentTerm();
 			boolean haventVoted = (mConfig.getVotedFor() == candidateID || mConfig.getVotedFor() == 0);
 			boolean candidateLogUpToDate = (lastLogTerm == mLog.getLastTerm()) ? lastLogIndex >= mLog.getLastIndex() : lastLogTerm > mLog.getLastTerm();
@@ -97,6 +99,7 @@ public class FollowerMode extends RaftMode {
 			Entry[] entries,
 			int leaderCommit) {
 		synchronized (mLock) {
+			log("append entries request from P"+leaderID+"."+leaderTerm);
 			int lowestCommonIndex = Math.max(0, Math.min(prevLogIndex, mLog.getLastIndex()));
 			int lowestCommonTerm = mLog.getEntry(lowestCommonIndex).term;
 			
@@ -107,7 +110,6 @@ public class FollowerMode extends RaftMode {
 				
 				// Repair Log
 				if (leaderTerm > mConfig.getCurrentTerm()) {
-					log("updating term to leader term");
 					mConfig.setCurrentTerm(leaderTerm, leaderID); //Update to make sure term is correct. 
 					log("updated term to leader term");
 				}
@@ -118,6 +120,8 @@ public class FollowerMode extends RaftMode {
 					} else {
 						log("inserted entries");
 					}
+				} else {
+					log("recognized heartbeat from leader.");
 				}
 				
 				mCommitIndex = Math.min(leaderCommit, mLog.getLastIndex());
@@ -134,7 +138,7 @@ public class FollowerMode extends RaftMode {
 	public void handleTimeout (int timerID) {
 		synchronized (mLock) {
 			if (timerID == electionTimerID) {
-				log("times up! became candidate");
+				log("time is up! transition to candidate");
 				electionTimer.cancel(); // If timer goes off, become a candidate
 				RaftServerImpl.setMode(new CandidateMode());
 			}
@@ -143,7 +147,7 @@ public class FollowerMode extends RaftMode {
 
 	public void log(String message) {
 		int currentTerm = mConfig.getCurrentTerm();
-		System.out.println("S" + mID + "." + currentTerm + ": " + message);
+		System.out.println("S" + mID + "." + currentTerm + " (follower): " + message);
 	}
 }
 
