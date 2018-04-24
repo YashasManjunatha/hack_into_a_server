@@ -127,6 +127,7 @@ public class CandidateMode extends RaftMode {
 				//log ("Vote Count: " + voteCount);
 				if (voteCount > ((double)mConfig.getNumServers())/2.0) {
 					RaftServerImpl.setMode(new LeaderMode());
+					return;
 				}
 
 				electionStart();
