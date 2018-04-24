@@ -30,34 +30,34 @@ public class LeaderMode extends RaftMode {
 
 	public void go () {
 		synchronized (mLock) {
-			log("switched to leader mode.");
+			log("switched to leader mode.");	
 			
-			// initial empty heart beat.	
-			RaftResponses.setTerm(mConfig.getCurrentTerm());
-			RaftResponses.clearAppendResponses(mConfig.getCurrentTerm());
-			for (int id = 1; id <= mConfig.getNumServers(); id++) {
-				if (id != mID) {
-					log("sending heartbeat to P"+id);
-					this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mCommitIndex);
-				}
-			}
-			
+			heartbeat(); // Will call appendEntriesRPC of all servers
 			heartbeatTimeout = HEARTBEAT_INTERVAL;
 			heartbeatTimer = scheduleTimer(heartbeatTimeout, heartbeatTimerID);
 
-			logReplication(); // Will call appendEntriesRPC of all servers
+			logReplication(); 
+		}
+	}
+	
+	public void heartbeat() {
+		RaftResponses.setTerm(mConfig.getCurrentTerm());
+		RaftResponses.clearAppendResponses(mConfig.getCurrentTerm());
+		for (int id = 1; id <= mConfig.getNumServers(); id++) {
+			if (id != mID) {
+				log("sending heartbeat to P"+id);
+				this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mCommitIndex);
+			}
 		}
 	}
 
 	public void logReplication() {
 		RaftResponses.setTerm(mConfig.getCurrentTerm());
 		RaftResponses.clearAppendResponses(mConfig.getCurrentTerm());
-		for (int id = 1; id <= mConfig.getNumServers(); id++) {
-			if (id != mID) {
-				// ENTRIES? 
-				log("sending heartbeat to P"+id);
-				this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0],  mCommitIndex);
-			}
+		// The goal is to replicate the log prefix on every server.
+		for (int id = 0; id < mConfig.getNumServers(); id++) {
+			
+			// do stuff.
 		}
 	}
 
@@ -130,15 +130,7 @@ public class LeaderMode extends RaftMode {
 	public void handleTimeout (int timerID) {
 		synchronized (mLock) {
 			if (timerID == heartbeatTimerID) {
-				RaftResponses.setTerm(mConfig.getCurrentTerm());
-				RaftResponses.clearAppendResponses(mConfig.getCurrentTerm());
-				for (int id = 1; id < mConfig.getNumServers(); id++) {
-					if (id != mID) { // Send heartbeat to other servers using an empty appendEntriesRPC
-						log("sending heartbeat to P"+id);
-						this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mCommitIndex);
-					}
-				}
-
+				heartbeat();
 				heartbeatTimer.cancel(); // Reset heartbeat timer
 				heartbeatTimer = scheduleTimer(heartbeatTimeout,heartbeatTimerID);
 			}

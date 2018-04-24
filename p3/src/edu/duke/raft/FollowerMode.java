@@ -21,16 +21,17 @@ import java.util.concurrent.ThreadLocalRandom;
 
 public class FollowerMode extends RaftMode {
 	Timer electionTimer;
-	int electionTimeout;
 	final int electionTimerID = 1;
 
 	public void go () {
 		synchronized (mLock) {
 			log("switched to follower mode.");
 			
+			int electionTimeout;
 			if ((electionTimeout = mConfig.getTimeoutOverride()) == -1) {
 				electionTimeout = ThreadLocalRandom.current().nextInt(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX);
 			}
+			
 			electionTimer = scheduleTimer(electionTimeout, electionTimerID);
 		}
 	}
@@ -59,11 +60,11 @@ public class FollowerMode extends RaftMode {
 		synchronized (mLock) {
 			log("vote request from server: " + candidateID + "." + candidateTerm);
 			
-			boolean candidateOutdatedTerm = candidateTerm < mConfig.getCurrentTerm();
-			boolean haventVoted = (mConfig.getVotedFor() == candidateID || mConfig.getVotedFor() == 0);
+			boolean candidateNewerTerm = candidateTerm >= mConfig.getCurrentTerm();
+			boolean haventVoted = (mConfig.getVotedFor() == 0 /*  || mConfig.getVotedFor() == candidateID */);
 			boolean candidateLogUpToDate = (lastLogTerm == mLog.getLastTerm()) ? lastLogIndex >= mLog.getLastIndex() : lastLogTerm > mLog.getLastTerm();
 			
-			if (!candidateOutdatedTerm && haventVoted && candidateLogUpToDate) {
+			if (candidateNewerTerm && haventVoted && candidateLogUpToDate) {
 				mConfig.setCurrentTerm(candidateTerm, candidateID);
 				log("voted for server: " + candidateID + "." + candidateTerm);
 				return 0; // Vote for server
@@ -104,25 +105,29 @@ public class FollowerMode extends RaftMode {
 			int lowestCommonTerm = mLog.getEntry(lowestCommonIndex).term;
 			
 			// investigate
-			if (leaderTerm >= mConfig.getCurrentTerm() && prevLogTerm == lowestCommonTerm && lowestCommonIndex == prevLogIndex) {
-				log("recognized P"+leaderID+"."+leaderTerm+" as leader.");
+			if (leaderTerm >= mConfig.getCurrentTerm()) {
+				log("recognized heartbeat from leader P"+leaderID);
 				electionTimer.cancel();
+				
+				int electionTimeout;
+				if ((electionTimeout = mConfig.getTimeoutOverride()) == -1) {
+					electionTimeout = ThreadLocalRandom.current().nextInt(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX);
+				}
+				
 				electionTimer = scheduleTimer(electionTimeout, electionTimerID);
 				
 				// Repair Log
-				if (leaderTerm > mConfig.getCurrentTerm()) {
-					mConfig.setCurrentTerm(leaderTerm, leaderID); //Update to make sure term is correct. 
+				if (leaderTerm >= mConfig.getCurrentTerm()) {
+					mConfig.setCurrentTerm(leaderTerm, 0); //Update to make sure term is correct. 
 					log("updated term to leader term");
 				}
 				
-				if (entries.length != 0) { // check for heartbeat
+				if (lowestCommonTerm == prevLogTerm && entries.length != 0) {
 					if (mLog.insert(entries, prevLogIndex, prevLogTerm) == -1) {
 						log("insert operation failed!"); // break?
 					} else {
 						log("inserted entries");
 					}
-				} else {
-					log("recognized heartbeat from leader.");
 				}
 				
 				mCommitIndex = Math.min(leaderCommit, mLog.getLastIndex());
