@@ -10,48 +10,29 @@ public class CandidateMode extends RaftMode {
 
 	public void go () {
 		synchronized (mLock) {
-			int term = mConfig.getCurrentTerm();     
-			term++;
-			System.out.println ("S" + 
-					mID + 
-					"." + 
-					term + 
-					": switched to candidate mode.");
-			mConfig.setCurrentTerm(term, mID);
-			RaftResponses.clearVotes(term);
-			RaftResponses.setTerm(term);
-
-			int electionTimeout; 
-			if ((electionTimeout = mConfig.getTimeoutOverride()) == -1) {
-				electionTimeout = ThreadLocalRandom.current().nextInt(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX);
-			}
-
-			electionTimer = scheduleTimer(electionTimeout, electionTimerID);
-
-			for (int serverID = 1; serverID <= mConfig.getNumServers(); serverID++) {
-				this.remoteRequestVote(serverID, mConfig.getCurrentTerm(), mID, mLog.getLastIndex(), mLog.getLastTerm());
-			}
+			log("entering candidate mode.");
+			electionStart();
 		}
 	}
 
 	private void electionStart() {
-		int term = mConfig.getCurrentTerm();     
-		term++;
 		log("starting new election.");
-
-		mConfig.setCurrentTerm(term, mID);
+		mConfig.setCurrentTerm(mConfig.getCurrentTerm() + 1, mID);
+		int term = mConfig.getCurrentTerm();
+		
 		RaftResponses.clearVotes(term);
 		RaftResponses.setTerm(term);
-
-		for (int serverID = 1; serverID <= mConfig.getNumServers(); serverID++) {
-			this.remoteRequestVote(serverID, mConfig.getCurrentTerm(), mID, mLog.getLastIndex(), mLog.getLastTerm());
-		}
-
+		
 		int electionTimeout;
 		if ((electionTimeout = mConfig.getTimeoutOverride()) == -1) {
 			electionTimeout = ThreadLocalRandom.current().nextInt(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX);
 		}
+		
 		electionTimer = scheduleTimer(electionTimeout, electionTimerID);
+
+		for (int serverID = 1; serverID <= mConfig.getNumServers(); serverID++) {
+			this.remoteRequestVote(serverID, mConfig.getCurrentTerm(), mID, mLastApplied, mLog.getLastTerm());
+		}
 	}
 
 
@@ -71,7 +52,7 @@ public class CandidateMode extends RaftMode {
 			int currentTerm = mConfig.getCurrentTerm ();
 
 			if (candidateID == mID) {
-				log("Voted for Server: " + candidateID + "." + candidateTerm);
+				log("Voted for self: " + candidateID + "." + candidateTerm);
 				mConfig.setCurrentTerm(candidateTerm, candidateID);
 				return 0;
 			} else {
@@ -97,9 +78,13 @@ public class CandidateMode extends RaftMode {
 			Entry[] entries,
 			int leaderCommit) {
 		synchronized (mLock) {
-			int term = mConfig.getCurrentTerm ();
-			int result = term;
-			return result;
+			if (leaderTerm >= mConfig.getCurrentTerm()) {
+				electionTimer.cancel();
+				mConfig.setCurrentTerm(leaderTerm,leaderID);
+				RaftServerImpl.setMode(new FollowerMode());
+				return -1;
+			}
+			return mConfig.getCurrentTerm();
 		}
 	}
 
@@ -107,23 +92,22 @@ public class CandidateMode extends RaftMode {
 	public void handleTimeout (int timerID) {
 		synchronized (mLock) {
 			if (timerID == electionTimerID) {
-				//int[] responseVotes = RaftResponses.getVotes(mConfig.getCurrentTerm());
+
 				double voteCount = 0;
 				for (int v : RaftResponses.getVotes(mConfig.getCurrentTerm())) {
 					if (v == 0) {
 						voteCount++;
-					} else if (v > mConfig.getCurrentTerm()) {
-						RaftServerImpl.setMode(new FollowerMode());
-						return;
 					}
 				}
 				log ("RaftResponses.getVotes(): " + Arrays.toString(RaftResponses.getVotes(mConfig.getCurrentTerm())));
-				//log ("Vote Count: " + voteCount);
-				if (voteCount > ((double)mConfig.getNumServers())/2.0) {
+				
+				if (voteCount > (mConfig.getNumServers())/2.0) {
+					log("server won, transitioning to leader mode.");
+					electionTimer.cancel();
 					RaftServerImpl.setMode(new LeaderMode());
+				} else {
+					electionStart();
 				}
-
-				electionStart();
 			}
 		}
 	}
