@@ -36,7 +36,14 @@ public class LeaderMode extends RaftMode {
 			heartbeatTimeout = HEARTBEAT_INTERVAL;
 			heartbeatTimer = scheduleTimer(heartbeatTimeout, heartbeatTimerID);
 
-			logReplication(); 
+			// replicate the log
+			RaftResponses.setTerm(mConfig.getCurrentTerm());
+			RaftResponses.clearAppendResponses(mConfig.getCurrentTerm());
+			// The goal is to replicate the log prefix on every server.
+			for (int id = 0; id < mConfig.getNumServers(); id++) {
+				
+				// remoteAppendEntries
+			}
 		}
 	}
 	
@@ -48,16 +55,6 @@ public class LeaderMode extends RaftMode {
 				log("sending heartbeat to P"+id);
 				this.remoteAppendEntries(id, mConfig.getCurrentTerm(),mID,mLog.getLastIndex(),mLog.getLastTerm(),new Entry[0], mCommitIndex);
 			}
-		}
-	}
-
-	public void logReplication() {
-		RaftResponses.setTerm(mConfig.getCurrentTerm());
-		RaftResponses.clearAppendResponses(mConfig.getCurrentTerm());
-		// The goal is to replicate the log prefix on every server.
-		for (int id = 0; id < mConfig.getNumServers(); id++) {
-			
-			// do stuff.
 		}
 	}
 
